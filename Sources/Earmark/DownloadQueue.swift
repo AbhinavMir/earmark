@@ -137,7 +137,9 @@ final class DownloadQueue {
         }
 
         do {
+            Log.write("Requesting a license for \(asin) (\(entry.book.title)).")
             let license = try await LicenseService(client: client).license(for: asin)
+            Log.write("License granted. \(license.chapters.count) chapters.")
             if !license.chapters.isEmpty {
                 await store.setChapters(license.chapters, for: asin)
             }
@@ -155,6 +157,8 @@ final class DownloadQueue {
             try await DownloadService().download(license, to: encrypted) { progress in
                 reporter.report(progress.fraction)
             }
+            let size = FileManager.default.fileSize(at: encrypted) ?? 0
+            Log.write("Downloaded \(size / 1_048_576) MB to \(encrypted.lastPathComponent).")
 
             update(asin, .decrypting)
             try await DecryptService().decrypt(
@@ -165,8 +169,10 @@ final class DownloadQueue {
             try? FileManager.default.removeItem(at: encrypted)
 
             await store.setFileName(fileName, for: asin)
+            Log.write("Finished \(entry.book.title).")
             update(asin, .done)
         } catch {
+            Log.write("Failed \(entry.book.title): \(error.localizedDescription)")
             update(asin, .failed(error.localizedDescription))
         }
     }
