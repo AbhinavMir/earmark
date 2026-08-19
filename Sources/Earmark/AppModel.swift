@@ -33,7 +33,7 @@ final class AppModel {
     private var syncTask: Task<Void, Never>?
 
     init(
-        credentials: CredentialStore = KeychainCredentialStore(),
+        credentials: CredentialStore = MigratingCredentialStore(),
         store: LibraryStore = LibraryStore(),
         audioDirectory: URL = LibraryStore.defaultAudioDirectory
     ) {

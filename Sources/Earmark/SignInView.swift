@@ -173,7 +173,7 @@ struct SignInView: View {
                 let name = "Earmark on \(ProcessInfo.processInfo.hostName)"
                 let identity = try await DeviceRegistration(marketplace: marketplace)
                     .register(code: code, attempt: attempt, deviceName: name)
-                try KeychainCredentialStore().save(identity)
+                try FileCredentialStore().save(identity)
                 await model.connect()
             } catch {
                 failure = error.localizedDescription
