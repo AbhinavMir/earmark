@@ -13,6 +13,11 @@ struct SignInView: View {
     @State private var attempt: DeviceRegistration.Attempt?
     @State private var isRegistering = false
     @State private var failure: String?
+    /// Every address the sign-in passed through, newest last. Shown when the
+    /// code is not found, so the reason is visible rather than guessed at.
+    @State private var trail: [String] = []
+    @State private var showingTrail = false
+    @State private var pastedRedirect = ""
 
     var body: some View {
         if let attempt {
@@ -59,7 +64,18 @@ struct SignInView: View {
     private func signInPage(_ attempt: DeviceRegistration.Attempt) -> some View {
         ZStack {
             AmazonSignInWebView(url: attempt.url) { redirect in
-                guard let code = DeviceRegistration.authorizationCode(in: redirect) else { return }
+                trail.append(redirect.absoluteString)
+                guard let code = DeviceRegistration.authorizationCode(in: redirect) else {
+                    // Landing on the return page without a code means the sign-in
+                    // finished but Amazon did not issue one. Say so rather than
+                    // sitting on a blank page.
+                    if redirect.path.contains("/ap/maplanding") {
+                        failure = "Amazon returned to the landing page without an "
+                            + "authorization code."
+                        showingTrail = true
+                    }
+                    return
+                }
                 register(code: code, attempt: attempt)
             }
             if isRegistering {
@@ -73,7 +89,59 @@ struct SignInView: View {
             ToolbarItem(placement: .cancellationAction) {
                 Button("Back") { self.attempt = nil }
             }
+            ToolbarItem {
+                Button("Show Addresses") { showingTrail = true }
+            }
         }
+        .sheet(isPresented: $showingTrail) { trailSheet }
+    }
+
+    /// Lists the addresses the sign-in passed through, so a failed capture can
+    /// be read directly. A code can also be pasted in by hand from here.
+    private var trailSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Sign-in addresses").font(.headline)
+            if let failure {
+                Text(failure).font(.callout).foregroundStyle(.red)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(Array(trail.enumerated()), id: \.offset) { _, address in
+                        Text(address)
+                            .font(.caption.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+            }
+            .frame(height: 260)
+
+            Text("Paste the address of the page that failed to load:")
+                .font(.callout)
+            HStack {
+                TextField("https://www.amazon.com/ap/maplanding?...", text: $pastedRedirect)
+                Button("Use") { usePastedRedirect() }
+                    .disabled(pastedRedirect.isEmpty)
+            }
+            HStack {
+                Spacer()
+                Button("Close") { showingTrail = false }
+            }
+        }
+        .padding(20)
+        .frame(width: 640)
+    }
+
+    private func usePastedRedirect() {
+        guard let attempt else { return }
+        guard let url = URL(string: pastedRedirect.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let code = DeviceRegistration.authorizationCode(in: url)
+        else {
+            failure = "That address carries no authorization code."
+            return
+        }
+        showingTrail = false
+        register(code: code, attempt: attempt)
     }
 
     private func register(code: String, attempt: DeviceRegistration.Attempt) {
