@@ -18,6 +18,7 @@ struct SignInView: View {
     @State private var trail: [String] = []
     @State private var showingTrail = false
     @State private var pastedRedirect = ""
+    @State private var currentAddress = ""
 
     var body: some View {
         if let attempt {
@@ -62,38 +63,58 @@ struct SignInView: View {
     }
 
     private func signInPage(_ attempt: DeviceRegistration.Attempt) -> some View {
-        ZStack {
-            AmazonSignInWebView(url: attempt.url) { redirect in
-                trail.append(redirect.absoluteString)
-                guard let code = DeviceRegistration.authorizationCode(in: redirect) else {
-                    // Landing on the return page without a code means the sign-in
-                    // finished but Amazon did not issue one. Say so rather than
-                    // sitting on a blank page.
-                    if redirect.path.contains("/ap/maplanding") {
-                        failure = "Amazon returned to the landing page without an "
-                            + "authorization code."
-                        showingTrail = true
-                    }
-                    return
-                }
-                register(code: code, attempt: attempt)
-            }
-            if isRegistering {
-                Color.black.opacity(0.35)
-                ProgressView("Registering this Mac...")
-                    .padding(24)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-            }
-        }
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
+        VStack(spacing: 0) {
+            // The controls live in the view rather than the window toolbar,
+            // which does not render for this screen.
+            HStack(spacing: 12) {
                 Button("Back") { self.attempt = nil }
-            }
-            ToolbarItem {
+                Spacer()
+                Text(currentAddress)
+                    .font(.caption.monospaced())
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                    .foregroundStyle(.secondary)
+                Spacer()
                 Button("Show Addresses") { showingTrail = true }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.bar)
+
+            Divider()
+
+            ZStack {
+                AmazonSignInWebView(url: attempt.url) { redirect in
+                    receive(redirect, attempt: attempt)
+                }
+                if isRegistering {
+                    Color.black.opacity(0.35)
+                    ProgressView("Registering this Mac...")
+                        .padding(24)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                }
             }
         }
         .sheet(isPresented: $showingTrail) { trailSheet }
+    }
+
+    /// Handles one address the sign-in passed through.
+    private func receive(_ redirect: URL, attempt: DeviceRegistration.Attempt) {
+        let address = redirect.absoluteString
+        if trail.last != address { trail.append(address) }
+        currentAddress = address
+
+        guard let code = DeviceRegistration.authorizationCode(in: redirect) else {
+            // Reaching the return page with no code means the sign-in finished
+            // but Amazon issued nothing. Say so instead of showing a blank 404.
+            if redirect.path.contains("/ap/maplanding") {
+                failure = "Amazon returned to the landing page without an authorization code."
+                showingTrail = true
+            }
+            return
+        }
+        register(code: code, attempt: attempt)
     }
 
     /// Lists the addresses the sign-in passed through, so a failed capture can
@@ -193,15 +214,41 @@ struct AmazonSignInWebView: NSViewRepresentable {
             self.onNavigate = onNavigate
         }
 
+        // Amazon reaches the landing page through a chain of server redirects.
+        // Each hook below sees a different part of that chain, so all four
+        // report, and the caller ignores an address it has already seen.
+
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            if let url = navigationAction.request.url {
-                onNavigate(url)
-            }
+            if let url = navigationAction.request.url { onNavigate(url) }
             decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void
+        ) {
+            if let url = navigationResponse.response.url { onNavigate(url) }
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
+        ) {
+            if let url = webView.url { onNavigate(url) }
+        }
+
+        func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+            if let url = webView.url { onNavigate(url) }
+        }
+
+        func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            if let url = webView.url { onNavigate(url) }
         }
     }
 }
