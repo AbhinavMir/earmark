@@ -98,12 +98,22 @@ final class DownloadQueue {
 
     // MARK: Running
 
+    /// Starts jobs until the limit is reached or nothing is waiting.
+    ///
+    /// A started job leaves the queued state here, before its task runs. While
+    /// it stayed queued, every pass picked the same job again, which recursed
+    /// until the stack ran out.
     private func startNext() {
-        guard running.count < DownloadQueue.concurrency else { return }
-        guard let next = jobs.first(where: { $0.state == .queued }) else { return }
-        running.insert(next.asin)
-        Task { await run(next.asin) }
-        startNext()
+        while running.count < DownloadQueue.concurrency {
+            guard let index = jobs.firstIndex(where: {
+                $0.state == .queued && !running.contains($0.asin)
+            }) else { return }
+
+            let asin = jobs[index].asin
+            jobs[index].state = .licensing
+            running.insert(asin)
+            Task { await run(asin) }
+        }
     }
 
     private func update(_ asin: String, _ state: DownloadState) {
@@ -127,7 +137,6 @@ final class DownloadQueue {
         }
 
         do {
-            update(asin, .licensing)
             let license = try await LicenseService(client: client).license(for: asin)
             if !license.chapters.isEmpty {
                 await store.setChapters(license.chapters, for: asin)

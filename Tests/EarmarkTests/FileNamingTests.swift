@@ -82,3 +82,46 @@ struct FileNamingTests {
         #expect(DownloadState.failed("Not entitled").label == "Not entitled")
     }
 }
+
+@Suite("Download queue")
+@MainActor
+struct DownloadQueueTests {
+
+    static func entry(_ asin: String, downloaded: Bool = false) -> LibraryEntry {
+        LibraryEntry(
+            book: Book(asin: asin, title: "Title \(asin)", authors: ["Ada Marsh"]),
+            fileName: downloaded ? "Ada Marsh/Title.m4b" : nil)
+    }
+
+    @Test("Enqueuing more titles than the limit does not spin")
+    func enqueueManyTerminates() {
+        // Before the fix, a started job stayed queued, so the starter chose it
+        // again on every pass and recursed until the stack ran out.
+        let queue = DownloadQueue(store: LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("queue-test-\(UUID().uuidString).json")))
+        queue.enqueue((1...50).map { Self.entry(String(format: "B%04d", $0)) })
+
+        #expect(queue.jobs.count == 50)
+        #expect(queue.jobs.filter { $0.state == .queued }.count == 48)
+    }
+
+    @Test("A title already downloaded is not queued again")
+    func skipsDownloadedTitles() {
+        let queue = DownloadQueue(store: LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("queue-test-\(UUID().uuidString).json")))
+        queue.enqueue([Self.entry("A", downloaded: true)])
+        #expect(queue.jobs.isEmpty)
+    }
+
+    @Test("Enqueuing the same title twice queues it once")
+    func doesNotDuplicate() {
+        let queue = DownloadQueue(store: LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("queue-test-\(UUID().uuidString).json")))
+        queue.enqueue([Self.entry("A")])
+        queue.enqueue([Self.entry("A")])
+        #expect(queue.jobs.count == 1)
+    }
+}

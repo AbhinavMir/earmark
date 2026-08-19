@@ -223,7 +223,18 @@ struct AmazonSignInWebView: NSViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            if let url = navigationAction.request.url { onNavigate(url) }
+            let request = navigationAction.request
+            if let url = request.url {
+                // The last hop of the Amazon flow may be a form submission,
+                // which carries its values in the body rather than the query.
+                let method = request.httpMethod ?? "GET"
+                let body = request.httpBody.flatMap { String(data: $0, encoding: .utf8) }
+                Log.write("nav \(method) \(url.absoluteString)")
+                if let body, !body.isEmpty {
+                    Log.write("nav body: \(body)")
+                }
+                onNavigate(url)
+            }
             decisionHandler(.allow)
         }
 
@@ -248,7 +259,19 @@ struct AmazonSignInWebView: NSViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            if let url = webView.url { onNavigate(url) }
+            if let url = webView.url {
+                Log.write("loaded \(url.absoluteString)")
+                onNavigate(url)
+            }
+            // A form submission's values never reach the delegate, so read the
+            // finished page's own address and form fields directly.
+            webView.evaluateJavaScript(
+                "JSON.stringify({href: location.href, forms: "
+                + "Array.from(document.querySelectorAll('input')).map(i => i.name)})"
+            ) { value, _ in
+                guard let value = value as? String else { return }
+                Log.write("page state: \(value)")
+            }
         }
     }
 }

@@ -75,11 +75,14 @@ final class AppModel {
             self.client = client
             queue.use(client: client)
             stage = .ready
+            Log.write("Connected. Fetching the library.")
             await refresh()
             startSyncLoop()
         } catch AudibleError.notRegistered {
+            Log.write("Connect found no stored identity.")
             stage = .signedOut
         } catch {
+            Log.write("Connect failed: \(error.localizedDescription)")
             banner = error.localizedDescription
             stage = .signedOut
         }
@@ -102,11 +105,14 @@ final class AppModel {
 
         do {
             let books = try await LibraryService(client: client).all()
+            Log.write("Library returned \(books.count) titles.")
             await store.merge(books)
             await reconcileDownloadedFiles()
             entries = await store.sortedEntries
             await pullPositions()
+            try? await store.save()
         } catch {
+            Log.write("Library refresh failed: \(error.localizedDescription)")
             banner = error.localizedDescription
         }
     }

@@ -39,11 +39,25 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# An ad-hoc signature is enough for a locally built application, and the
-# Keychain item stays tied to this identity across rebuilds.
-codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || {
-    echo "Warning: codesign failed. The application still runs." >&2
-}
+# Sign with a real identity when the machine has one.
+#
+# An ad-hoc signature changes with every build, so macOS treats each build as a
+# different application and asks for Keychain permission again. A stable
+# identity keeps that permission across rebuilds.
+IDENTITY="$(security find-identity -v -p codesigning \
+    | grep "Developer ID Application" \
+    | head -1 \
+    | sed -E 's/.*"(.*)"/\1/')"
+
+if [ -n "$IDENTITY" ]; then
+    codesign --force --deep --options runtime --sign "$IDENTITY" "$APP_DIR" >/dev/null 2>&1 \
+        && echo "Signed as: $IDENTITY" \
+        || echo "Warning: signing failed. The application still runs." >&2
+else
+    echo "No signing identity found. Using an ad-hoc signature, which asks for" >&2
+    echo "Keychain permission again after every build." >&2
+    codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+fi
 
 echo "Built ${APP_DIR}"
 echo "Run it with: open ${APP_DIR}"
