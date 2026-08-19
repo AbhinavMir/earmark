@@ -1,0 +1,185 @@
+import SwiftUI
+import AudibleKit
+
+/// The transport, pinned under the library while something is loaded.
+struct PlayerBar: View {
+    @Environment(AppModel.self) private var model
+    @State private var showingChapters = false
+    @State private var scrubbing: TimeInterval?
+
+    private var player: Player { model.player }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if let override = model.positionOverride {
+                undoBar(previous: override.previous)
+            }
+            HStack(spacing: 16) {
+                artwork
+                titles
+                Spacer(minLength: 12)
+                transport
+                Spacer(minLength: 12)
+                speedControl
+                sleepControl
+                chapterButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            scrubber
+        }
+        .background(.bar)
+        .popover(isPresented: $showingChapters) { chapterList }
+    }
+
+    // MARK: Pieces
+
+    private var artwork: some View {
+        AsyncImage(url: player.entry?.book.coverURL) { image in
+            image.resizable()
+        } placeholder: {
+            RoundedRectangle(cornerRadius: 4).fill(.quaternary)
+        }
+        .frame(width: 44, height: 44)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private var titles: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(player.entry?.book.title ?? "")
+                .font(.callout.weight(.medium))
+                .lineLimit(1)
+            Text(player.currentChapter?.title ?? player.entry?.book.authorLine ?? "")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: 280, alignment: .leading)
+    }
+
+    private var transport: some View {
+        HStack(spacing: 18) {
+            Button { player.previousChapter() } label: {
+                Image(systemName: "backward.end.fill")
+            }
+            Button { player.skipBack() } label: {
+                Image(systemName: "gobackward.15")
+            }
+            Button { player.togglePlayPause() } label: {
+                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.title2)
+            }
+            .keyboardShortcut(.space, modifiers: [])
+            Button { player.skipAhead() } label: {
+                Image(systemName: "goforward.30")
+            }
+            Button { player.nextChapter() } label: {
+                Image(systemName: "forward.end.fill")
+            }
+        }
+        .buttonStyle(.plain)
+        .font(.title3)
+    }
+
+    private var speedControl: some View {
+        Menu("\(player.rate, specifier: "%.2f")×") {
+            ForEach([0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0], id: \.self) { rate in
+                Button("\(rate, specifier: "%.2f")×") { player.rate = Float(rate) }
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 66)
+    }
+
+    private var sleepControl: some View {
+        Menu {
+            Button("End of Chapter") { player.sleepAtEndOfChapter() }
+            Divider()
+            ForEach([5, 10, 15, 30, 45, 60], id: \.self) { minutes in
+                Button("\(minutes) minutes") {
+                    player.setSleepTimer(TimeInterval(minutes * 60))
+                }
+            }
+            Divider()
+            Button("Off") { player.setSleepTimer(nil) }
+        } label: {
+            Image(systemName: player.sleepDeadline == nil ? "moon" : "moon.fill")
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 34)
+    }
+
+    private var chapterButton: some View {
+        Button { showingChapters = true } label: {
+            Image(systemName: "list.bullet")
+        }
+        .buttonStyle(.plain)
+        .disabled(player.entry?.chapters.isEmpty ?? true)
+    }
+
+    private var scrubber: some View {
+        HStack(spacing: 10) {
+            Text(timeText(scrubbing ?? player.position))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+            Slider(
+                value: Binding(
+                    get: { scrubbing ?? player.position },
+                    set: { scrubbing = $0 }),
+                in: 0...max(player.duration, 1),
+                onEditingChanged: { editing in
+                    guard !editing, let target = scrubbing else { return }
+                    player.seek(to: target)
+                    scrubbing = nil
+                })
+            Text("−" + timeText(max(0, player.duration - (scrubbing ?? player.position))))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+    }
+
+    private func undoBar(previous: TimeInterval) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "iphone.and.arrow.forward")
+            Text("Moved to where you stopped on another device.")
+                .font(.callout)
+            Button("Undo") { model.undoPositionOverride() }
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.quaternary)
+    }
+
+    private var chapterList: some View {
+        List(player.entry?.chapters ?? [], id: \.start) { chapter in
+            Button {
+                player.jump(to: chapter)
+                showingChapters = false
+            } label: {
+                HStack {
+                    Text(chapter.title).lineLimit(1)
+                    Spacer()
+                    Text(timeText(chapter.start))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
+            .fontWeight(chapter.start == player.currentChapter?.start ? .semibold : .regular)
+        }
+        .frame(width: 340, height: 400)
+    }
+
+    private func timeText(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let remainder = total % 60
+        return hours > 0
+            ? String(format: "%d:%02d:%02d", hours, minutes, remainder)
+            : String(format: "%d:%02d", minutes, remainder)
+    }
+}
