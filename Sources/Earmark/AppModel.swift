@@ -26,6 +26,10 @@ final class AppModel {
     let player = Player()
     let queue: DownloadQueue
     let store: LibraryStore
+    /// True while a stream is being set up and nothing plays yet.
+    private(set) var isStreamStarting = false
+    /// The stream now running, if any.
+    private var stream: StreamService?
 
     private let credentials: CredentialStore
     private let audioDirectory: URL
@@ -46,7 +50,12 @@ final class AppModel {
             self?.recordPosition(position, for: asin)
         }
         player.onFinish = { [weak self] _ in
+            self?.stream?.stop()
+            self?.stream = nil
             self?.player.unload()
+        }
+        player.onSeekBeyondStream = { [weak self] asin, position in
+            self?.restartStream(asin, at: position)
         }
     }
 
@@ -90,6 +99,8 @@ final class AppModel {
 
     func signOut() {
         syncTask?.cancel()
+        stream?.stop()
+        stream = nil
         player.unload()
         client = nil
         try? credentials.clear()
@@ -150,22 +161,58 @@ final class AppModel {
 
     // MARK: Playback
 
+    /// Plays a title.
+    ///
+    /// A downloaded title plays from disk. Anything else streams, so playback
+    /// starts without waiting for a whole book to arrive.
     func play(_ entry: LibraryEntry) async {
-        guard let url = fileURL(for: entry) else {
-            queue.enqueue([entry])
-            banner = "\(entry.book.title) is downloading. It will play once it is ready."
-            return
-        }
-        // Take the phone's position before starting, so a session begun there
-        // continues here rather than restarting.
+        // Take the position Audible holds before starting, so a session begun
+        // on the phone continues here rather than restarting.
         await pullPosition(for: entry.book.asin)
         guard let fresh = await store.entry(entry.book.asin) else { return }
 
-        do {
-            try player.load(fresh, fileURL: url)
+        if let url = fileURL(for: fresh) {
+            stream?.stop()
+            stream = nil
+            player.load(fresh, url: url, source: .file(url))
             player.play()
+            return
+        }
+        await startStream(of: fresh, from: fresh.position)
+    }
+
+    /// Streams a title from `offset`, replacing any stream already running.
+    private func startStream(of entry: LibraryEntry, from offset: TimeInterval) async {
+        guard let client else { return }
+        isStreamStarting = true
+        defer { isStreamStarting = false }
+
+        do {
+            let license = try await LicenseService(client: client).license(for: entry.book.asin)
+            if !license.chapters.isEmpty {
+                await store.setChapters(license.chapters, for: entry.book.asin)
+            }
+
+            let service = try StreamService()
+            let started = try await service.start(license, from: offset)
+            stream?.stop()
+            stream = service
+
+            let fresh = await store.entry(entry.book.asin) ?? entry
+            player.load(fresh, url: started.playlistURL, source: .stream(offset: offset))
+            player.play()
+            Log.write("Streaming \(entry.book.title) from \(Int(offset))s.")
         } catch {
-            banner = "\(entry.book.title) could not be opened. \(error.localizedDescription)"
+            Log.write("Streaming \(entry.book.title) failed: \(error.localizedDescription)")
+            banner = "\(entry.book.title) could not be played. \(error.localizedDescription)"
+        }
+    }
+
+    /// Restarts the stream at a position it does not hold.
+    private func restartStream(_ asin: String, at position: TimeInterval) {
+        Task {
+            guard let entry = await store.entry(asin) else { return }
+            await startStream(of: entry, from: position)
         }
     }
 

@@ -49,10 +49,19 @@ struct PlayerBar: View {
             Text(player.entry?.book.title ?? "")
                 .font(.callout.weight(.medium))
                 .lineLimit(1)
-            Text(player.currentChapter?.title ?? player.entry?.book.authorLine ?? "")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                if player.source?.isStream == true {
+                    // Streaming is worth showing: seeking outside what has
+                    // arrived costs a restart, and nothing is kept on disk.
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Text(player.currentChapter?.title ?? player.entry?.book.authorLine ?? "")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
         }
         .frame(maxWidth: 280, alignment: .leading)
     }
@@ -66,10 +75,15 @@ struct PlayerBar: View {
                 Image(systemName: "gobackward.15")
             }
             Button { player.togglePlayPause() } label: {
-                Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title2)
+                if player.isBuffering {
+                    ProgressView().controlSize(.small)
+                } else {
+                    Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title2)
+                }
             }
             .keyboardShortcut(.space, modifiers: [])
+            .disabled(player.isBuffering)
             Button { player.skipAhead() } label: {
                 Image(systemName: "goforward.30")
             }

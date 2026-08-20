@@ -135,6 +135,15 @@ final class DownloadQueue {
             update(asin, .failed("This title is no longer in the library."))
             return
         }
+        // A title downloaded by an earlier run needs nothing further. Retrying
+        // an old failure must not fetch a file that is already here.
+        if let fileName = entry.fileName,
+           FileManager.default.fileExists(
+               atPath: audioDirectory.appendingPathComponent(fileName).path) {
+            Log.write("\(entry.book.title) is already downloaded.")
+            update(asin, .done)
+            return
+        }
 
         do {
             Log.write("Requesting a license for \(asin) (\(entry.book.title)).")

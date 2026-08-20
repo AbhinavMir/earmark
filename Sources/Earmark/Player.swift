@@ -3,94 +3,126 @@ import AVFoundation
 import MediaPlayer
 import AudibleKit
 
-/// Plays one downloaded title.
+/// Plays one title, either from a downloaded file or from a stream.
 ///
 /// The player owns playback only. It reports where it is; deciding what to do
 /// with that position belongs to `AppModel`.
 @MainActor
 @Observable
-final class Player: NSObject {
-    /// The title now loaded, if any.
+final class Player {
+
+    /// Where the audio comes from.
+    enum Source: Equatable {
+        /// A decrypted file on this Mac. Seeking anywhere is free.
+        case file(URL)
+        /// A stream that begins partway into the title. Its zero is the
+        /// offset, so every reported position adds it back.
+        case stream(offset: TimeInterval)
+
+        var isStream: Bool {
+            if case .stream = self { return true }
+            return false
+        }
+
+        var offset: TimeInterval {
+            if case .stream(let offset) = self { return offset }
+            return 0
+        }
+    }
+
     private(set) var entry: LibraryEntry?
+    private(set) var source: Source?
     private(set) var isPlaying = false
-    /// Current offset from the start of the title.
+    /// Position within the whole title, not within the stream.
     private(set) var position: TimeInterval = 0
+    /// Length of the whole title.
     private(set) var duration: TimeInterval = 0
+    /// True while the stream is filling and there is nothing to play yet.
+    private(set) var isBuffering = false
 
     var rate: Float = 1.0 {
         didSet {
-            player?.rate = rate
-            if !isPlaying { player?.pause() }
+            if isPlaying { player.rate = rate }
             updateNowPlaying()
         }
     }
 
-    /// Seconds a forward skip moves.
     var skipForward: TimeInterval = 30
-    /// Seconds a backward skip moves.
     var skipBackward: TimeInterval = 15
 
-    /// When set, playback stops at this moment.
     private(set) var sleepDeadline: Date?
 
-    /// Called every time the position changes, so the model can record it.
+    /// Called as the position changes, so the model can record it.
     var onPositionChange: ((String, TimeInterval) -> Void)?
     /// Called when a title reaches its end.
     var onFinish: ((String) -> Void)?
+    /// Called when a seek leaves what the stream holds, with the wanted
+    /// position. The model restarts the stream there.
+    var onSeekBeyondStream: ((String, TimeInterval) -> Void)?
 
-    private var player: AVAudioPlayer?
-    private var ticker: Timer?
+    private let player = AVPlayer()
+    private var timeObserver: Any?
+    private var endObserver: NSObjectProtocol?
 
-    override init() {
-        super.init()
+    init() {
+        player.actionAtItemEnd = .pause
         configureRemoteCommands()
     }
 
     // MARK: Loading
 
-    /// Loads a downloaded title and seeks to its stored position.
-    func load(_ entry: LibraryEntry, fileURL: URL) throws {
-        stopTicker()
-        let player = try AVAudioPlayer(contentsOf: fileURL)
-        player.delegate = self
-        player.enableRate = true
-        player.rate = rate
-        player.prepareToPlay()
-        // A position at or past the end restarts the title rather than
-        // dropping the listener at the final second.
-        player.currentTime = entry.position < player.duration - 1 ? entry.position : 0
+    /// Loads a title from `url`, which is either a local file or a playlist.
+    func load(_ entry: LibraryEntry, url: URL, source: Source) {
+        teardownObservers()
 
-        self.player = player
+        let item = AVPlayerItem(url: url)
+        // Speech stays intelligible at high rates with this algorithm.
+        item.audioTimePitchAlgorithm = .timeDomain
+        player.replaceCurrentItem(with: item)
+
         self.entry = entry
-        self.duration = player.duration
-        self.position = player.currentTime
+        self.source = source
+        self.duration = entry.book.duration ?? 0
+        self.position = source.offset
+        self.isBuffering = source.isStream
+
+        if case .file = source {
+            // A position at or past the end restarts the title rather than
+            // leaving the listener on the final second.
+            let start = entry.position < (entry.book.duration ?? .infinity) - 5
+                ? entry.position : 0
+            player.seek(to: CMTime(seconds: start, preferredTimescale: 600))
+            position = start
+        }
+
+        observe(item)
         updateNowPlaying()
     }
 
     func unload() {
         pause()
-        player = nil
+        teardownObservers()
+        player.replaceCurrentItem(with: nil)
         entry = nil
+        source = nil
         position = 0
         duration = 0
+        isBuffering = false
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
 
     // MARK: Transport
 
     func play() {
-        guard let player else { return }
-        player.play()
+        guard entry != nil else { return }
         player.rate = rate
         isPlaying = true
-        startTicker()
         updateNowPlaying()
     }
 
     func pause() {
-        player?.pause()
+        player.pause()
         isPlaying = false
-        stopTicker()
         reportPosition()
         updateNowPlaying()
     }
@@ -99,20 +131,51 @@ final class Player: NSObject {
         isPlaying ? pause() : play()
     }
 
+    /// Moves to `seconds` measured from the start of the title.
     func seek(to seconds: TimeInterval) {
-        guard let player else { return }
-        player.currentTime = max(0, min(seconds, player.duration))
-        position = player.currentTime
-        reportPosition()
-        updateNowPlaying()
+        guard let entry, let source else { return }
+        let target = max(0, min(seconds, duration > 0 ? duration : seconds))
+
+        switch source {
+        case .file:
+            player.seek(
+                to: CMTime(seconds: target, preferredTimescale: 600),
+                toleranceBefore: .zero,
+                toleranceAfter: .zero)
+            position = target
+            reportPosition()
+            updateNowPlaying()
+
+        case .stream(let offset):
+            // The stream holds only what it has written since it started.
+            // Anything outside that needs a stream that begins there.
+            let withinStream = target - offset
+            if withinStream >= 0, withinStream <= loadedStreamSeconds() {
+                player.seek(to: CMTime(seconds: withinStream, preferredTimescale: 600))
+                position = target
+                reportPosition()
+                updateNowPlaying()
+            } else {
+                isBuffering = true
+                onSeekBeyondStream?(entry.book.asin, target)
+            }
+        }
     }
 
     func skipAhead() { seek(to: position + skipForward) }
     func skipBack() { seek(to: position - skipBackward) }
 
+    /// How many seconds the stream has ready from its own start.
+    private func loadedStreamSeconds() -> TimeInterval {
+        guard let ranges = player.currentItem?.loadedTimeRanges, let last = ranges.last else {
+            return 0
+        }
+        let range = last.timeRangeValue
+        return CMTimeGetSeconds(range.start) + CMTimeGetSeconds(range.duration)
+    }
+
     // MARK: Chapters
 
-    /// The chapter covering the current position.
     var currentChapter: Chapter? {
         entry?.chapters.last { $0.start <= position }
     }
@@ -128,8 +191,6 @@ final class Player: NSObject {
 
     func previousChapter() {
         guard let chapters = entry?.chapters else { return }
-        // Within the first seconds of a chapter, go back to the one before it.
-        // Later in a chapter, go to that chapter's start.
         let current = chapters.last { $0.start <= position }
         if let current, position - current.start > 3 {
             seek(to: current.start)
@@ -145,7 +206,6 @@ final class Player: NSObject {
 
     // MARK: Sleep timer
 
-    /// Stops playback after `interval`. Pass nil to cancel.
     func setSleepTimer(_ interval: TimeInterval?) {
         guard let interval else {
             sleepDeadline = nil
@@ -154,39 +214,79 @@ final class Player: NSObject {
         sleepDeadline = Date().addingTimeInterval(interval)
     }
 
-    /// Stops at the end of the chapter now playing.
     func sleepAtEndOfChapter() {
         guard let chapter = currentChapter else { return }
         setSleepTimer(max(1, chapter.end - position))
     }
 
-    // MARK: Position reporting
+    // MARK: Observation
 
-    private func startTicker() {
-        stopTicker()
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+    private func observe(_ item: AVPlayerItem) {
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
+            queue: .main
+        ) { [weak self] time in
+            MainActor.assumeIsolated {
+                self?.tick(CMTimeGetSeconds(time))
+            }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        ticker = timer
+
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.finish()
+            }
+        }
     }
 
-    private func stopTicker() {
-        ticker?.invalidate()
-        ticker = nil
+    private func teardownObservers() {
+        if let timeObserver {
+            player.removeTimeObserver(timeObserver)
+            self.timeObserver = nil
+        }
+        if let endObserver {
+            NotificationCenter.default.removeObserver(endObserver)
+            self.endObserver = nil
+        }
     }
 
-    private func tick() {
-        guard let player else { return }
-        position = player.currentTime
+    private func tick(_ elapsed: TimeInterval) {
+        guard let source else { return }
+        position = source.offset + elapsed
+        if elapsed > 0 { isBuffering = false }
+
+        // A title of unknown length takes the length the player reports once
+        // it knows it, rather than staying at zero.
+        if duration <= 0, case .file = source,
+           let itemDuration = player.currentItem?.duration,
+           itemDuration.isNumeric {
+            duration = CMTimeGetSeconds(itemDuration)
+        }
 
         if let deadline = sleepDeadline, Date() >= deadline {
             sleepDeadline = nil
             pause()
             return
         }
-        // Record every 30 seconds of playback, not every tick.
         if Int(position) % 30 == 0 { reportPosition() }
+    }
+
+    private func finish() {
+        isPlaying = false
+        guard let asin = entry?.book.asin else { return }
+        // A stream ends every time its written part runs out, which is not the
+        // end of the book. Only a file that reaches its end is finished.
+        if source?.isStream == true, duration > 0, position < duration - 5 {
+            isBuffering = true
+            onSeekBeyondStream?(asin, position)
+            return
+        }
+        position = duration
+        onPositionChange?(asin, duration)
+        onFinish?(asin)
     }
 
     private func reportPosition() {
@@ -249,19 +349,5 @@ final class Player: NSObject {
             info[MPMediaItemPropertyAlbumTitle] = chapter.title
         }
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
-    }
-}
-
-extension Player: AVAudioPlayerDelegate {
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in
-            isPlaying = false
-            stopTicker()
-            if let asin = entry?.book.asin {
-                position = duration
-                onPositionChange?(asin, duration)
-                onFinish?(asin)
-            }
-        }
     }
 }

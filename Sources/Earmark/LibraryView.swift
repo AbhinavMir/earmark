@@ -146,7 +146,9 @@ struct LibraryView: View {
 
     @ViewBuilder
     private func menu(for entry: LibraryEntry) -> some View {
-        Button("Play") { Task { await model.play(entry) } }
+        Button(entry.isDownloaded ? "Play" : "Stream") {
+            Task { await model.play(entry) }
+        }
         if entry.isDownloaded {
             Button("Remove Download") { Task { await model.removeDownload(entry) } }
         } else {
