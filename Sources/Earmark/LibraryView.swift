@@ -61,7 +61,6 @@ struct LibraryView: View {
                 if let banner = model.banner {
                     BannerView(text: banner) { model.banner = nil }
                 }
-                if !selection.isEmpty { selectionBar }
                 content
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // The bar appears as soon as a title is chosen, not once its
@@ -155,7 +154,10 @@ struct LibraryView: View {
                 spacing: 24
             ) {
                 ForEach(visibleEntries) { entry in
-                    BookTile(entry: entry, isSelected: selection.contains(entry.id))
+                    BookTile(
+                        entry: entry,
+                        isSelected: selection.contains(entry.id),
+                        onToggleSelection: { toggle(entry.id) })
                         .onTapGesture(count: 2) { Task { await model.play(entry) } }
                         .onTapGesture { toggle(entry.id) }
                         .contextMenu { menu(for: entry) }
@@ -182,32 +184,6 @@ struct LibraryView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
         }
-    }
-
-    /// Appears while titles are selected, so the count and the actions on them
-    /// are together rather than hidden in a toolbar.
-    private var selectionBar: some View {
-        HStack(spacing: 12) {
-            Text("\(selection.count) selected")
-                .font(.callout.weight(.medium))
-
-            Button("Select All") { selection = Set(visibleEntries.map(\.id)) }
-            Button("Clear") { selection.removeAll() }
-
-            Spacer()
-
-            Button {
-                model.download(selectedEntries)
-                selection.removeAll()
-            } label: {
-                Label("Download \(downloadableCount)", systemImage: "arrow.down.circle")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(downloadableCount == 0)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.quaternary)
     }
 
     private var selectedEntries: [LibraryEntry] {
@@ -273,7 +249,10 @@ struct LibraryView: View {
                 model.download(selectedEntries)
                 selection.removeAll()
             } label: {
-                Label("Download Selected", systemImage: "arrow.down.circle")
+                Label(
+                    downloadableCount > 0
+                        ? "Download \(downloadableCount)" : "Download Selected",
+                    systemImage: "arrow.down.circle")
             }
             .disabled(downloadableCount == 0)
         }
@@ -281,7 +260,7 @@ struct LibraryView: View {
             Button { showingQueue = true } label: {
                 Label("Downloads", systemImage: "tray.and.arrow.down")
             }
-            .badge(model.queue.jobs.filter(\.state.isActive).count)
+            .badge(model.queue.visibleActiveCount)
         }
         ToolbarItem {
             Button { Task { await model.refresh() } } label: {

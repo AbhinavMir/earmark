@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import AppKit
 import AudibleKit
 
 /// The state the whole interface reads.
@@ -59,6 +60,9 @@ final class AppModel {
         }
         player.onSeekBeyondStream = { [weak self] asin, position in
             self?.restartStream(asin, at: position)
+        }
+        queue.onFinish = { [weak self] asin in
+            self?.switchToDownloadedFile(asin)
         }
     }
 
@@ -151,6 +155,12 @@ final class AppModel {
         queue.enqueue(entries)
     }
 
+    /// Opens the audio file's folder, with the file selected.
+    func revealInFinder(_ entry: LibraryEntry) {
+        guard let url = fileURL(for: entry) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+
     /// Deletes the audio file and clears the mark. The position is kept.
     func removeDownload(_ entry: LibraryEntry) async {
         if let url = fileURL(for: entry) {
@@ -240,10 +250,40 @@ final class AppModel {
             player.load(fresh, url: started.playlistURL, source: .stream(offset: offset))
             player.play()
             Log.write("Streaming \(entry.book.title) from \(Int(offset))s.")
+
+            // Keep what is being listened to. The stream holds nothing, so
+            // without this the same audio is fetched again next time.
+            queue.enqueue([fresh], quietly: true)
         } catch {
             guard !Task.isCancelled else { return }
             Log.write("Streaming \(entry.book.title) failed: \(error.localizedDescription)")
             banner = "\(entry.book.title) could not be played. \(error.localizedDescription)"
+        }
+    }
+
+    /// Moves a title now streaming onto its downloaded file.
+    ///
+    /// The file seeks anywhere at once and needs no network, so it is better
+    /// in every way than the stream it replaces. The switch keeps the current
+    /// position, and does nothing when this title is not the one playing.
+    private func switchToDownloadedFile(_ asin: String) {
+        Task {
+            guard player.entry?.book.asin == asin,
+                  player.source?.isStream == true,
+                  let entry = await store.entry(asin),
+                  let url = fileURL(for: entry)
+            else { return }
+
+            let position = player.position
+            let wasPlaying = player.isPlaying
+            var current = entry
+            current.position = position
+
+            player.load(current, url: url, source: .file(url))
+            if wasPlaying { player.play() }
+            stream?.stop()
+            stream = nil
+            Log.write("Moved \(entry.book.title) from the stream to its file.")
         }
     }
 

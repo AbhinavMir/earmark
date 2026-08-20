@@ -37,6 +37,9 @@ struct DownloadJob: Identifiable, Sendable {
     let asin: String
     let title: String
     var state: DownloadState = .queued
+    /// True when nobody asked for this download: it follows a stream, so that
+    /// the title is kept once it has been listened to.
+    var isQuiet = false
     var id: String { asin }
 }
 
@@ -52,6 +55,10 @@ final class DownloadQueue {
     /// How many titles download at once. More than this competes for bandwidth
     /// without finishing any title sooner.
     static let concurrency = 2
+
+    /// Called when a title finishes downloading, so a stream of that title
+    /// can hand over to the file.
+    var onFinish: ((String) -> Void)?
 
     private let audioDirectory: URL
     private let store: LibraryStore
@@ -73,12 +80,22 @@ final class DownloadQueue {
     }
 
     /// Adds titles that are not already queued or downloaded.
-    func enqueue(_ entries: [LibraryEntry]) {
+    ///
+    /// - Parameter quietly: Pass true for a download that follows a stream.
+    ///   Such a job stays out of the count on the toolbar, because nobody
+    ///   asked for it and nobody is waiting on it.
+    func enqueue(_ entries: [LibraryEntry], quietly: Bool = false) {
         for entry in entries where !isQueued(entry.book.asin) && !entry.isDownloaded {
             jobs.removeAll { $0.asin == entry.book.asin }
-            jobs.append(DownloadJob(asin: entry.book.asin, title: entry.book.title))
+            jobs.append(DownloadJob(
+                asin: entry.book.asin, title: entry.book.title, isQuiet: quietly))
         }
         startNext()
+    }
+
+    /// Jobs a person is waiting on. A quiet job is not one of them.
+    var visibleActiveCount: Int {
+        jobs.filter { $0.state.isActive && !$0.isQuiet }.count
     }
 
     func cancel(_ asin: String) {
@@ -180,6 +197,7 @@ final class DownloadQueue {
             await store.setFileName(fileName, for: asin)
             Log.write("Finished \(entry.book.title).")
             update(asin, .done)
+            onFinish?(asin)
         } catch {
             Log.write("Failed \(entry.book.title): \(error.localizedDescription)")
             update(asin, .failed(error.localizedDescription))

@@ -125,3 +125,43 @@ struct DownloadQueueTests {
         #expect(queue.jobs.count == 1)
     }
 }
+
+@Suite("Quiet downloads")
+@MainActor
+struct QuietDownloadTests {
+
+    static func makeQueue() -> DownloadQueue {
+        DownloadQueue(store: LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("quiet-\(UUID().uuidString).json")))
+    }
+
+    static func entry(_ asin: String) -> LibraryEntry {
+        LibraryEntry(book: Book(asin: asin, title: "Title \(asin)", authors: ["Ada Marsh"]))
+    }
+
+    @Test("A download that follows a stream stays out of the count")
+    func quietJobsAreNotCounted() {
+        let queue = Self.makeQueue()
+        queue.enqueue([Self.entry("A")], quietly: true)
+        #expect(queue.jobs.count == 1)
+        #expect(queue.visibleActiveCount == 0)
+    }
+
+    @Test("A download somebody asked for is counted")
+    func requestedJobsAreCounted() {
+        let queue = Self.makeQueue()
+        queue.enqueue([Self.entry("A")])
+        #expect(queue.visibleActiveCount == 1)
+    }
+
+    @Test("A quiet job still appears in the queue list")
+    func quietJobsAreStillVisibleInTheQueue() {
+        // Quiet means unannounced, not hidden. Somebody looking at the queue
+        // should still see what is using the network.
+        let queue = Self.makeQueue()
+        queue.enqueue([Self.entry("A")], quietly: true)
+        #expect(queue.jobs.first?.isQuiet == true)
+        #expect(queue.jobs.first?.title == "Title A")
+    }
+}

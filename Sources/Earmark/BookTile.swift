@@ -5,6 +5,7 @@ struct BookTile: View {
     @Environment(AppModel.self) private var model
     let entry: LibraryEntry
     let isSelected: Bool
+    var onToggleSelection: () -> Void = {}
     @State private var isHovering = false
 
     var body: some View {
@@ -49,25 +50,73 @@ struct BookTile: View {
         .onHover { isHovering = $0 }
     }
 
-    /// A play button on hover, so the way to start a title is visible rather
-    /// than something to guess at.
+    /// Two large controls over the cover while the pointer is on it: play,
+    /// and everything else. Both are big enough to hit without aiming.
     @ViewBuilder
     private var playOverlay: some View {
         if isHovering || isCurrent {
             ZStack {
-                RoundedRectangle(cornerRadius: 6).fill(.black.opacity(isCurrent ? 0.2 : 0.35))
-                Button {
-                    Task { await model.play(entry) }
-                } label: {
-                    Image(systemName: playSymbol)
-                        .font(.system(size: 34))
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(.black.opacity(isHovering ? 0.42 : 0.18))
+
+                if isHovering {
+                    HStack(spacing: 18) {
+                        Button {
+                            Task { await model.play(entry) }
+                        } label: {
+                            Image(systemName: playSymbol)
+                                .font(.system(size: 40))
+                                .foregroundStyle(.white)
+                                .shadow(radius: 5)
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isPreparing)
+                        .help(entry.isDownloaded ? "Play" : "Stream")
+
+                        Menu {
+                            moreActions
+                        } label: {
+                            Image(systemName: "ellipsis.circle.fill")
+                                .font(.system(size: 40))
+                                .foregroundStyle(.white)
+                                .shadow(radius: 5)
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .frame(width: 44, height: 44)
+                        .help("More")
+                    }
+                } else {
+                    // Playing but not hovered: say so without hiding the cover.
+                    Image(systemName: model.player.isPlaying ? "speaker.wave.2.fill" : "pause.fill")
+                        .font(.system(size: 26))
                         .foregroundStyle(.white)
                         .shadow(radius: 4)
                 }
-                .buttonStyle(.plain)
-                .disabled(isPreparing)
             }
-            .transition(.opacity)
+        }
+    }
+
+    /// What the second control offers.
+    @ViewBuilder
+    private var moreActions: some View {
+        Button(entry.isDownloaded ? "Play" : "Stream") {
+            Task { await model.play(entry) }
+        }
+        Divider()
+        if entry.isDownloaded {
+            Button("Show in Finder") { model.revealInFinder(entry) }
+            Button("Remove Download") { Task { await model.removeDownload(entry) } }
+        } else if model.queue.isQueued(entry.id) {
+            Button("Cancel Download") { model.queue.cancel(entry.id) }
+        } else {
+            Button("Download") { model.download([entry]) }
+        }
+        Divider()
+        Button(isSelected ? "Deselect" : "Select") { onToggleSelection() }
+        if !entry.bookmarks.isEmpty {
+            Divider()
+            Text("\(entry.bookmarks.count) bookmarks")
         }
     }
 
