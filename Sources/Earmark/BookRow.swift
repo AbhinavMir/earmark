@@ -1,0 +1,150 @@
+import SwiftUI
+import AudibleKit
+
+/// One title as a row, for the list layout.
+///
+/// A row shows what a cover cannot: length, series position, and how far the
+/// listener has gone, all readable at a glance down the column.
+struct BookRow: View {
+    @Environment(AppModel.self) private var model
+    let entry: LibraryEntry
+    let isSelected: Bool
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Toggle("", isOn: Binding(
+                get: { isSelected },
+                set: { _ in onToggleSelection() }))
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+
+            cover
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.book.title)
+                    .font(.body.weight(.medium))
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(entry.book.authorLine.isEmpty
+                         ? "Unknown author" : entry.book.authorLine)
+                    if let series = entry.book.series {
+                        Text("·")
+                        Text(series.position.map { "\(series.name) \($0)" } ?? series.name)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+
+            Spacer(minLength: 12)
+
+            statusColumn
+            lengthColumn
+            actions
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(rowBackground))
+        .onHover { isHovering = $0 }
+        .contentShape(Rectangle())
+    }
+
+    var onToggleSelection: () -> Void = {}
+
+    private var rowBackground: Color {
+        if isSelected { return Color.accentColor.opacity(0.16) }
+        if isCurrent { return Color.accentColor.opacity(0.08) }
+        return isHovering ? Color.primary.opacity(0.05) : .clear
+    }
+
+    private var cover: some View {
+        AsyncImage(url: entry.book.coverURL) { image in
+            image.resizable()
+        } placeholder: {
+            RoundedRectangle(cornerRadius: 4).fill(.quaternary)
+        }
+        .frame(width: 40, height: 40)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    /// Where the listener is, or what the queue is doing with this title.
+    @ViewBuilder
+    private var statusColumn: some View {
+        if let job = model.queue.jobs.first(where: { $0.asin == entry.id && $0.state.isActive }) {
+            Text(job.state.label)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 130, alignment: .trailing)
+        } else if entry.isFinished {
+            Label("Finished", systemImage: "checkmark.circle")
+                .labelStyle(.iconOnly)
+                .foregroundStyle(.green)
+                .frame(width: 130, alignment: .trailing)
+        } else if let progress = entry.progress, progress > 0.001 {
+            HStack(spacing: 6) {
+                ProgressView(value: progress).frame(width: 60)
+                Text("\(Int(progress * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 130, alignment: .trailing)
+        } else {
+            Color.clear.frame(width: 130, height: 1)
+        }
+    }
+
+    private var lengthColumn: some View {
+        Text(entry.book.duration.map(BookRow.hoursAndMinutes) ?? "")
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .frame(width: 60, alignment: .trailing)
+    }
+
+    private var actions: some View {
+        HStack(spacing: 10) {
+            Button {
+                Task { await model.play(entry) }
+            } label: {
+                Image(systemName: playSymbol)
+            }
+            .buttonStyle(.plain)
+            .help(entry.isDownloaded ? "Play" : "Stream")
+
+            if entry.isDownloaded {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(.green)
+                    .help("Downloaded")
+            } else {
+                Button { model.download([entry]) } label: {
+                    Image(systemName: "arrow.down.circle")
+                }
+                .buttonStyle(.plain)
+                .help("Download")
+                .disabled(model.queue.isQueued(entry.id))
+            }
+        }
+        .frame(width: 56, alignment: .trailing)
+    }
+
+    private var isCurrent: Bool {
+        model.player.entry?.id == entry.id || model.preparingEntry?.id == entry.id
+    }
+
+    private var playSymbol: String {
+        if model.preparingEntry?.id == entry.id { return "hourglass" }
+        if isCurrent, model.player.isPlaying { return "pause.circle" }
+        return "play.circle"
+    }
+
+    /// A length as hours and minutes, which is how a listener judges a book.
+    static func hoursAndMinutes(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds) / 60
+        let hours = total / 60
+        let minutes = total % 60
+        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+    }
+}

@@ -30,12 +30,26 @@ enum LibraryFilter: Hashable {
     }
 }
 
+/// How the library is laid out.
+enum LibraryLayout: String {
+    case grid
+    case list
+
+    var symbol: String { self == .grid ? "square.grid.2x2" : "list.bullet" }
+}
+
 struct LibraryView: View {
     @Environment(AppModel.self) private var model
     @State private var filter: LibraryFilter = .all
     @State private var search = ""
     @State private var selection: Set<String> = []
     @State private var showingQueue = false
+    /// Kept between launches, because it is a lasting preference.
+    @AppStorage("libraryLayout") private var layoutName = LibraryLayout.grid.rawValue
+
+    private var layout: LibraryLayout {
+        LibraryLayout(rawValue: layoutName) ?? .grid
+    }
 
     var body: some View {
         @Bindable var model = model
@@ -47,7 +61,9 @@ struct LibraryView: View {
                 if let banner = model.banner {
                     BannerView(text: banner) { model.banner = nil }
                 }
-                grid
+                if !selection.isEmpty { selectionBar }
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // The bar appears as soon as a title is chosen, not once its
                 // audio is ready, so a click has an immediate effect.
                 if model.player.entry != nil || model.preparingEntry != nil {
@@ -115,33 +131,92 @@ struct LibraryView: View {
         }
     }
 
-    private var grid: some View {
-        ScrollView {
-            if visibleEntries.isEmpty {
-                ContentUnavailableView(
-                    model.entries.isEmpty ? "No titles yet" : "Nothing matches",
-                    systemImage: "books.vertical",
-                    description: Text(model.entries.isEmpty
-                        ? "Refresh to fetch your Audible library."
-                        : "Try a different search."))
-                .padding(.top, 80)
-            } else {
-                LazyVGrid(
-                    columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 20)],
-                    spacing: 24
-                ) {
-                    ForEach(visibleEntries) { entry in
-                        BookTile(entry: entry, isSelected: selection.contains(entry.id))
-                            .onTapGesture(count: 2) { Task { await model.play(entry) } }
-                            .onTapGesture { toggle(entry.id) }
-                            .contextMenu { menu(for: entry) }
-                            .accessibilityLabel(
-                                "\(entry.book.title) by \(entry.book.authorLine)")
-                    }
-                }
-                .padding(20)
+    @ViewBuilder
+    private var content: some View {
+        if visibleEntries.isEmpty {
+            ContentUnavailableView(
+                model.entries.isEmpty ? "No titles yet" : "Nothing matches",
+                systemImage: "books.vertical",
+                description: Text(model.entries.isEmpty
+                    ? "Refresh to fetch your Audible library."
+                    : "Try a different search."))
+        } else {
+            switch layout {
+            case .grid: grid
+            case .list: list
             }
         }
+    }
+
+    private var grid: some View {
+        ScrollView {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 160, maximum: 200), spacing: 20)],
+                spacing: 24
+            ) {
+                ForEach(visibleEntries) { entry in
+                    BookTile(entry: entry, isSelected: selection.contains(entry.id))
+                        .onTapGesture(count: 2) { Task { await model.play(entry) } }
+                        .onTapGesture { toggle(entry.id) }
+                        .contextMenu { menu(for: entry) }
+                        .accessibilityLabel(
+                            "\(entry.book.title) by \(entry.book.authorLine)")
+                }
+            }
+            .padding(20)
+        }
+    }
+
+    private var list: some View {
+        ScrollView {
+            LazyVStack(spacing: 2) {
+                ForEach(visibleEntries) { entry in
+                    BookRow(
+                        entry: entry,
+                        isSelected: selection.contains(entry.id),
+                        onToggleSelection: { toggle(entry.id) })
+                        .onTapGesture(count: 2) { Task { await model.play(entry) } }
+                        .contextMenu { menu(for: entry) }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+        }
+    }
+
+    /// Appears while titles are selected, so the count and the actions on them
+    /// are together rather than hidden in a toolbar.
+    private var selectionBar: some View {
+        HStack(spacing: 12) {
+            Text("\(selection.count) selected")
+                .font(.callout.weight(.medium))
+
+            Button("Select All") { selection = Set(visibleEntries.map(\.id)) }
+            Button("Clear") { selection.removeAll() }
+
+            Spacer()
+
+            Button {
+                model.download(selectedEntries)
+                selection.removeAll()
+            } label: {
+                Label("Download \(downloadableCount)", systemImage: "arrow.down.circle")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(downloadableCount == 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.quaternary)
+    }
+
+    private var selectedEntries: [LibraryEntry] {
+        selection.compactMap { id in model.entries.first { $0.id == id } }
+    }
+
+    /// Selected titles that are not already downloaded or queued.
+    private var downloadableCount: Int {
+        selectedEntries.filter { !$0.isDownloaded && !model.queue.isQueued($0.id) }.count
     }
 
     private func toggle(_ id: String) {
@@ -169,15 +244,38 @@ struct LibraryView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItem {
+            Picker("Layout", selection: $layoutName) {
+                Image(systemName: LibraryLayout.grid.symbol)
+                    .tag(LibraryLayout.grid.rawValue)
+                Image(systemName: LibraryLayout.list.symbol)
+                    .tag(LibraryLayout.list.rawValue)
+            }
+            .pickerStyle(.segmented)
+            .help("Covers or list")
+        }
+        ToolbarItem {
             Button {
-                model.download(selection.compactMap { id in
-                    model.entries.first { $0.id == id }
-                })
+                if selection.isEmpty {
+                    selection = Set(visibleEntries.map(\.id))
+                } else {
+                    selection.removeAll()
+                }
+            } label: {
+                Label(
+                    selection.isEmpty ? "Select All" : "Clear Selection",
+                    systemImage: selection.isEmpty
+                        ? "checkmark.circle" : "checkmark.circle.fill")
+            }
+            .keyboardShortcut("a", modifiers: .command)
+        }
+        ToolbarItem {
+            Button {
+                model.download(selectedEntries)
                 selection.removeAll()
             } label: {
                 Label("Download Selected", systemImage: "arrow.down.circle")
             }
-            .disabled(selection.isEmpty)
+            .disabled(downloadableCount == 0)
         }
         ToolbarItem {
             Button { showingQueue = true } label: {

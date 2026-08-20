@@ -39,6 +39,9 @@ struct PlayerBar: View {
             .padding(.vertical, 10)
             scrubber
         }
+        // Hugs its content. Without this the bar takes the space the library
+        // does not use, and the scrubber ends up far below the controls.
+        .fixedSize(horizontal: false, vertical: true)
         .background(.bar)
         .popover(isPresented: $showingChapters) { chapterList }
     }
