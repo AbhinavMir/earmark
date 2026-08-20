@@ -26,10 +26,13 @@ final class AppModel {
     let player = Player()
     let queue: DownloadQueue
     let store: LibraryStore
-    /// True while a stream is being set up and nothing plays yet.
-    private(set) var isStreamStarting = false
+    /// The title being prepared, shown at once so a click has an effect
+    /// before any audio exists.
+    private(set) var preparingEntry: LibraryEntry?
     /// The stream now running, if any.
     private var stream: StreamService?
+    /// The work that prepares playback. Cancelled when another title starts.
+    private var prepareTask: Task<Void, Never>?
 
     private let credentials: CredentialStore
     private let audioDirectory: URL
@@ -99,9 +102,7 @@ final class AppModel {
 
     func signOut() {
         syncTask?.cancel()
-        stream?.stop()
-        stream = nil
-        player.unload()
+        stopPlayback()
         client = nil
         try? credentials.clear()
         stage = .signedOut
@@ -165,10 +166,44 @@ final class AppModel {
     ///
     /// A downloaded title plays from disk. Anything else streams, so playback
     /// starts without waiting for a whole book to arrive.
+    /// Plays a title.
+    ///
+    /// A downloaded title plays from disk. Anything else streams, so playback
+    /// starts without waiting for a whole book.
+    ///
+    /// The title appears in the player straight away, before any audio is
+    /// ready, so the click has a visible effect. Starting another title
+    /// cancels this one rather than leaving two streams running.
     func play(_ entry: LibraryEntry) async {
+        prepareTask?.cancel()
+        preparingEntry = entry
+        banner = nil
+
+        let task = Task { [weak self] in
+            guard let self else { return }
+            await self.prepare(entry)
+        }
+        prepareTask = task
+        await task.value
+    }
+
+    /// Stops whatever is playing or being prepared.
+    func stopPlayback() {
+        prepareTask?.cancel()
+        prepareTask = nil
+        preparingEntry = nil
+        stream?.stop()
+        stream = nil
+        player.unload()
+    }
+
+    private func prepare(_ entry: LibraryEntry) async {
+        defer { if preparingEntry?.id == entry.id { preparingEntry = nil } }
+
         // Take the position Audible holds before starting, so a session begun
         // on the phone continues here rather than restarting.
         await pullPosition(for: entry.book.asin)
+        guard !Task.isCancelled else { return }
         guard let fresh = await store.entry(entry.book.asin) else { return }
 
         if let url = fileURL(for: fresh) {
@@ -184,17 +219,20 @@ final class AppModel {
     /// Streams a title from `offset`, replacing any stream already running.
     private func startStream(of entry: LibraryEntry, from offset: TimeInterval) async {
         guard let client else { return }
-        isStreamStarting = true
-        defer { isStreamStarting = false }
-
         do {
             let license = try await LicenseService(client: client).license(for: entry.book.asin)
+            guard !Task.isCancelled else { return }
             if !license.chapters.isEmpty {
                 await store.setChapters(license.chapters, for: entry.book.asin)
+                entries = await store.sortedEntries
             }
 
             let service = try StreamService()
             let started = try await service.start(license, from: offset)
+            guard !Task.isCancelled else {
+                service.stop()
+                return
+            }
             stream?.stop()
             stream = service
 
@@ -203,6 +241,7 @@ final class AppModel {
             player.play()
             Log.write("Streaming \(entry.book.title) from \(Int(offset))s.")
         } catch {
+            guard !Task.isCancelled else { return }
             Log.write("Streaming \(entry.book.title) failed: \(error.localizedDescription)")
             banner = "\(entry.book.title) could not be played. \(error.localizedDescription)"
         }

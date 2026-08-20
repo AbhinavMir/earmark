@@ -9,6 +9,16 @@ struct PlayerBar: View {
 
     private var player: Player { model.player }
 
+    /// The title on screen: the one playing, or the one being prepared.
+    private var entry: LibraryEntry? {
+        player.entry ?? model.preparingEntry
+    }
+
+    /// True while a title has been chosen but no audio is ready.
+    private var isPreparing: Bool {
+        player.entry == nil && model.preparingEntry != nil
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             if let override = model.positionOverride {
@@ -23,6 +33,7 @@ struct PlayerBar: View {
                 speedControl
                 sleepControl
                 chapterButton
+                stopButton
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -35,7 +46,7 @@ struct PlayerBar: View {
     // MARK: Pieces
 
     private var artwork: some View {
-        AsyncImage(url: player.entry?.book.coverURL) { image in
+        AsyncImage(url: entry?.book.coverURL) { image in
             image.resizable()
         } placeholder: {
             RoundedRectangle(cornerRadius: 4).fill(.quaternary)
@@ -46,7 +57,7 @@ struct PlayerBar: View {
 
     private var titles: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(player.entry?.book.title ?? "")
+            Text(entry?.book.title ?? "")
                 .font(.callout.weight(.medium))
                 .lineLimit(1)
             HStack(spacing: 6) {
@@ -57,13 +68,21 @@ struct PlayerBar: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                Text(player.currentChapter?.title ?? player.entry?.book.authorLine ?? "")
+                Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
         }
         .frame(maxWidth: 280, alignment: .leading)
+    }
+
+    /// What sits under the title: the state while preparing, the chapter
+    /// while playing.
+    private var subtitle: String {
+        if isPreparing { return "Preparing..." }
+        if player.isBuffering { return "Buffering..." }
+        return player.currentChapter?.title ?? entry?.book.authorLine ?? ""
     }
 
     private var transport: some View {
@@ -75,15 +94,16 @@ struct PlayerBar: View {
                 Image(systemName: "gobackward.15")
             }
             Button { player.togglePlayPause() } label: {
-                if player.isBuffering {
-                    ProgressView().controlSize(.small)
+                if isPreparing || player.isBuffering {
+                    ProgressView().controlSize(.small).frame(width: 22)
                 } else {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title2)
+                        .frame(width: 22)
                 }
             }
             .keyboardShortcut(.space, modifiers: [])
-            .disabled(player.isBuffering)
+            .disabled(isPreparing)
             Button { player.skipAhead() } label: {
                 Image(systemName: "goforward.30")
             }
@@ -93,6 +113,17 @@ struct PlayerBar: View {
         }
         .buttonStyle(.plain)
         .font(.title3)
+        .disabled(isPreparing)
+    }
+
+    /// Leaves the player, and stops a stream that is still starting.
+    private var stopButton: some View {
+        Button { model.stopPlayback() } label: {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+        }
+        .buttonStyle(.plain)
+        .help("Stop")
     }
 
     private var speedControl: some View {
@@ -136,16 +167,30 @@ struct PlayerBar: View {
             Text(timeText(scrubbing ?? player.position))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
-            Slider(
-                value: Binding(
-                    get: { scrubbing ?? player.position },
-                    set: { scrubbing = $0 }),
-                in: 0...max(player.duration, 1),
-                onEditingChanged: { editing in
-                    guard !editing, let target = scrubbing else { return }
-                    player.seek(to: target)
-                    scrubbing = nil
-                })
+            ZStack(alignment: .leading) {
+                // What has arrived, drawn behind the handle. A stream can only
+                // move freely inside this part.
+                if let buffered = player.bufferedFraction, player.source?.isStream == true {
+                    GeometryReader { proxy in
+                        Capsule()
+                            .fill(.tertiary)
+                            .frame(width: proxy.size.width * buffered, height: 4)
+                            .frame(maxHeight: .infinity, alignment: .center)
+                    }
+                    .allowsHitTesting(false)
+                }
+                Slider(
+                    value: Binding(
+                        get: { scrubbing ?? player.position },
+                        set: { scrubbing = $0 }),
+                    in: 0...max(player.duration, 1),
+                    onEditingChanged: { editing in
+                        guard !editing, let target = scrubbing else { return }
+                        player.seek(to: target)
+                        scrubbing = nil
+                    })
+                .disabled(isPreparing)
+            }
             Text("−" + timeText(max(0, player.duration - (scrubbing ?? player.position))))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)

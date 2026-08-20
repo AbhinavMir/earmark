@@ -48,7 +48,9 @@ struct LibraryView: View {
                     BannerView(text: banner) { model.banner = nil }
                 }
                 grid
-                if model.player.entry != nil {
+                // The bar appears as soon as a title is chosen, not once its
+                // audio is ready, so a click has an immediate effect.
+                if model.player.entry != nil || model.preparingEntry != nil {
                     Divider()
                     PlayerBar()
                 }
@@ -133,6 +135,8 @@ struct LibraryView: View {
                             .onTapGesture(count: 2) { Task { await model.play(entry) } }
                             .onTapGesture { toggle(entry.id) }
                             .contextMenu { menu(for: entry) }
+                            .accessibilityLabel(
+                                "\(entry.book.title) by \(entry.book.authorLine)")
                     }
                 }
                 .padding(20)

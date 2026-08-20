@@ -37,8 +37,14 @@ final class Player {
     private(set) var position: TimeInterval = 0
     /// Length of the whole title.
     private(set) var duration: TimeInterval = 0
-    /// True while the stream is filling and there is nothing to play yet.
+    /// True while the player has no audio ready to play.
+    ///
+    /// This comes from the player itself rather than from a guess, so it
+    /// clears the moment sound starts and returns if the stream runs dry.
     private(set) var isBuffering = false
+    /// How much of the title is ready to play, from 0 to 1. Nil when the
+    /// length is unknown.
+    private(set) var bufferedFraction: Double?
 
     var rate: Float = 1.0 {
         didSet {
@@ -63,6 +69,7 @@ final class Player {
     private let player = AVPlayer()
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
+    private var statusObservers: [NSKeyValueObservation] = []
 
     init() {
         player.actionAtItemEnd = .pause
@@ -84,7 +91,8 @@ final class Player {
         self.source = source
         self.duration = entry.book.duration ?? 0
         self.position = source.offset
-        self.isBuffering = source.isStream
+        self.isBuffering = true
+        self.bufferedFraction = nil
 
         if case .file = source {
             // A position at or past the end restarts the title rather than
@@ -115,6 +123,9 @@ final class Player {
 
     func play() {
         guard entry != nil else { return }
+        // Playing as soon as the buffer allows, rather than stalling silently
+        // when it does not.
+        player.automaticallyWaitsToMinimizeStalling = true
         player.rate = rate
         isPlaying = true
         updateNowPlaying()
@@ -164,6 +175,16 @@ final class Player {
 
     func skipAhead() { seek(to: position + skipForward) }
     func skipBack() { seek(to: position - skipBackward) }
+
+    /// Works out how much of the title is ready to play.
+    private func updateBufferedFraction() {
+        guard duration > 0, let source else {
+            bufferedFraction = nil
+            return
+        }
+        let ready = source.offset + loadedStreamSeconds()
+        bufferedFraction = min(1, ready / duration)
+    }
 
     /// How many seconds the stream has ready from its own start.
     private func loadedStreamSeconds() -> TimeInterval {
@@ -222,6 +243,31 @@ final class Player {
     // MARK: Observation
 
     private func observe(_ item: AVPlayerItem) {
+        // The player knows whether it can keep playing. Asking it beats
+        // inferring from elapsed time, which reports "loading" over audio that
+        // is already playing.
+        statusObservers = [
+            player.observe(\.timeControlStatus, options: [.initial, .new]) { [weak self] player, _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.isBuffering = player.timeControlStatus == .waitingToPlayAtSpecifiedRate
+                    self.isPlaying = player.timeControlStatus == .playing
+                    self.updateNowPlaying()
+                }
+            },
+            item.observe(\.isPlaybackLikelyToKeepUp, options: [.new]) { [weak self] item, _ in
+                MainActor.assumeIsolated {
+                    guard let self, item.isPlaybackLikelyToKeepUp else { return }
+                    self.isBuffering = false
+                }
+            },
+            item.observe(\.loadedTimeRanges, options: [.new]) { [weak self] _, _ in
+                MainActor.assumeIsolated {
+                    self?.updateBufferedFraction()
+                }
+            }
+        ]
+
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600),
             queue: .main
@@ -243,6 +289,8 @@ final class Player {
     }
 
     private func teardownObservers() {
+        statusObservers.forEach { $0.invalidate() }
+        statusObservers.removeAll()
         if let timeObserver {
             player.removeTimeObserver(timeObserver)
             self.timeObserver = nil
@@ -256,7 +304,6 @@ final class Player {
     private func tick(_ elapsed: TimeInterval) {
         guard let source else { return }
         position = source.offset + elapsed
-        if elapsed > 0 { isBuffering = false }
 
         // A title of unknown length takes the length the player reports once
         // it knows it, rather than staying at zero.
