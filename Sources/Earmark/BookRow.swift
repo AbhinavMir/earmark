@@ -62,13 +62,7 @@ struct BookRow: View {
     }
 
     private var cover: some View {
-        AsyncImage(url: entry.book.coverURL) { image in
-            image.resizable()
-        } placeholder: {
-            RoundedRectangle(cornerRadius: 4).fill(.quaternary)
-        }
-        .frame(width: 40, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
+        CoverView(entry: entry, size: 40)
     }
 
     /// Where the listener is, or what the queue is doing with this title.

@@ -49,13 +49,14 @@ struct PlayerBar: View {
     // MARK: Pieces
 
     private var artwork: some View {
-        AsyncImage(url: entry?.book.coverURL) { image in
-            image.resizable()
-        } placeholder: {
-            RoundedRectangle(cornerRadius: 4).fill(.quaternary)
+        Group {
+            if let entry {
+                CoverView(entry: entry, size: 44)
+            } else {
+                RoundedRectangle(cornerRadius: 4).fill(.quaternary)
+                    .frame(width: 44, height: 44)
+            }
         }
-        .frame(width: 44, height: 44)
-        .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
     private var titles: some View {

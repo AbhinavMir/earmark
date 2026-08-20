@@ -11,6 +11,8 @@ struct BookTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             cover
+                .overlay { playOverlay }
+                .onHover { isHovering = $0 }
             Text(entry.book.title)
                 .font(.callout.weight(.medium))
                 .lineLimit(2)
@@ -30,24 +32,11 @@ struct BookTile: View {
 
     private var cover: some View {
         ZStack(alignment: .bottomTrailing) {
-            AsyncImage(url: entry.book.coverURL) { image in
-                image.resizable().aspectRatio(1, contentMode: .fit)
-            } placeholder: {
-                RoundedRectangle(cornerRadius: 6)
-                    .fill(.quaternary)
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay {
-                        Image(systemName: "book.closed").foregroundStyle(.secondary)
-                    }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .shadow(radius: 3, y: 2)
-
+            CoverView(entry: entry, size: 168)
+                .shadow(radius: 3, y: 2)
             badge.padding(6)
         }
         .overlay(alignment: .bottom) { progressBar }
-        .overlay { playOverlay }
-        .onHover { isHovering = $0 }
     }
 
     /// Two large controls over the cover while the pointer is on it: play,

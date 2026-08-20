@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import SwiftUI
 import Testing
 import AudibleKit
 @testable import Earmark
@@ -164,4 +166,69 @@ struct QuietDownloadTests {
         #expect(queue.jobs.first?.isQuiet == true)
         #expect(queue.jobs.first?.title == "Title A")
     }
+}
+
+
+@Suite("Cover placeholder")
+struct CoverPlaceholderTests {
+
+    @Test("A title always gets the same colour")
+    func hueIsStable() {
+        // A card that changed colour on every redraw would be worse than a
+        // blank one.
+        #expect(CoverPalette.hue(for: "B0TEST0001") == CoverPalette.hue(for: "B0TEST0001"))
+    }
+
+    @Test("Different titles get different colours")
+    func huesDiffer() {
+        #expect(CoverPalette.hue(for: "B0TEST0001") != CoverPalette.hue(for: "B0TEST0002"))
+    }
+
+    @Test("Every colour is a usable hue")
+    func hueIsInRange() {
+        for asin in ["A", "B0TEST0001", "1508280282", ""] {
+            let hue = CoverPalette.hue(for: asin)
+            #expect(hue >= 0 && hue < 1)
+        }
+    }
+}
+
+@Suite("Cover cache")
+struct CoverCacheTests {
+
+    static func temporaryCache() -> (CoverCache, URL) {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("covers-\(UUID().uuidString)", isDirectory: true)
+        return (CoverCache(directory: dir), dir)
+    }
+
+    @Test("A title with no cached cover reports as missing")
+    func reportsMissing() async {
+        let (cache, _) = Self.temporaryCache()
+        #expect(await cache.isCached("B0TEST0001") == false)
+        #expect(await cache.cachedCount(of: ["A", "B"]) == 0)
+    }
+
+    @Test("A title with no cover URL yields no image and does not fail")
+    func handlesMissingURL() async {
+        let (cache, _) = Self.temporaryCache()
+        #expect(await cache.image(for: "B0TEST0001", url: nil) == nil)
+    }
+
+    @Test("A cover written to disk is found again")
+    func readsFromDisk() async throws {
+        let (cache, dir) = Self.temporaryCache()
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        // A single pixel, written as bytes rather than drawn, so the test
+        // needs neither a network nor a screen.
+        let pixel = try #require(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
+        try pixel.write(to: dir.appendingPathComponent("B0TEST0001.img"))
+
+        #expect(await cache.isCached("B0TEST0001"))
+        #expect(await cache.image(for: "B0TEST0001", url: nil) != nil)
+        #expect(await cache.cachedCount(of: ["B0TEST0001", "B0TEST0002"]) == 1)
+    }
+
 }

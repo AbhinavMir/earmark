@@ -39,6 +39,8 @@ struct RootView: View {
             ProgressView().controlSize(.large)
         case .signedOut:
             SignInView()
+        case .settingUp:
+            SetupView()
         case .ready:
             LibraryView()
         }

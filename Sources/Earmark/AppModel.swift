@@ -13,6 +13,8 @@ final class AppModel {
     enum Stage: Equatable {
         case checkingCredentials
         case signedOut
+        /// The first fetch, with covers being cached. Shown once.
+        case settingUp
         case ready
     }
 
@@ -27,6 +29,12 @@ final class AppModel {
     let player = Player()
     let queue: DownloadQueue
     let store: LibraryStore
+    /// Covers on disk, so the library draws without the network.
+    let covers = CoverCache()
+    /// What the setup screen says it is doing.
+    private(set) var setupMessage = "Reaching Audible..."
+    /// How far setup has gone, from 0 to 1. Nil while the total is unknown.
+    private(set) var setupFraction: Double?
     /// The title being prepared, shown at once so a click has an effect
     /// before any audio exists.
     private(set) var preparingEntry: LibraryEntry?
@@ -90,9 +98,24 @@ final class AppModel {
             let client = try AudibleClient(store: credentials)
             self.client = client
             queue.use(client: client)
-            stage = .ready
             Log.write("Connected. Fetching the library.")
+            // The setup screen is for the work that has to finish before the
+            // library is worth looking at: the first fetch, and the covers.
+            // A library whose covers are already saved opens straight away.
+            let known = await store.sortedEntries
+            let missing = known.count
+                - (await covers.cachedCount(of: known.map(\.book.asin)))
+            stage = (known.isEmpty || missing > 10) ? .settingUp : .ready
+
             await refresh()
+            if stage == .settingUp {
+                await cacheCovers()
+                stage = .ready
+            } else {
+                // A handful of new titles are fetched quietly behind the
+                // library, which already draws.
+                Task { await self.cacheCovers() }
+            }
             startSyncLoop()
         } catch AudibleError.notRegistered {
             Log.write("Connect found no stored identity.")
@@ -120,7 +143,9 @@ final class AppModel {
         defer { isRefreshing = false }
 
         do {
+            setupMessage = "Fetching your library..."
             let books = try await LibraryService(client: client).all()
+            setupMessage = "Found \(books.count) titles"
             Log.write("Library returned \(books.count) titles.")
             await store.merge(books)
             await reconcileDownloadedFiles()
@@ -131,6 +156,26 @@ final class AppModel {
             Log.write("Library refresh failed: \(error.localizedDescription)")
             banner = error.localizedDescription
         }
+    }
+
+    /// Fetches every cover that is not on disk yet, reporting progress.
+    private func cacheCovers() async {
+        let entries = await store.sortedEntries
+        guard !entries.isEmpty else { return }
+
+        let wanted = entries.map { (asin: $0.book.asin, url: $0.book.coverURL) }
+        let already = await covers.cachedCount(of: entries.map(\.book.asin))
+        guard already < wanted.count else { return }
+
+        setupMessage = "Saving covers 0 of \(wanted.count)"
+        setupFraction = 0
+        await covers.warm(wanted) { [weak self] done, total in
+            await MainActor.run {
+                self?.setupMessage = "Saving covers \(done) of \(total)"
+                self?.setupFraction = Double(done) / Double(total)
+            }
+        }
+        Log.write("Cached covers for \(wanted.count) titles.")
     }
 
     /// Checks that each title marked as downloaded still has its file.
