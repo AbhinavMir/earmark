@@ -17,6 +17,11 @@ when you quit one.
   phone continues on the Mac and the other way round.
 - Keeps local bookmarks with notes.
 
+## Install
+
+Download the latest release, or build it yourself. The application is signed
+and notarised, so it opens without a warning.
+
 ## Requirements
 
 - macOS 14 or later
