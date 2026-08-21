@@ -9,10 +9,7 @@ struct SetupView: View {
 
     var body: some View {
         VStack(spacing: 24) {
-            Image(systemName: "headphones")
-                .font(.system(size: 44))
-                .foregroundStyle(.secondary)
-                .symbolEffect(.pulse)
+            AppIconView(size: 76)
 
             VStack(spacing: 8) {
                 Text("Setting your library up")

@@ -30,9 +30,7 @@ struct SignInView: View {
 
     private var chooseStore: some View {
         VStack(spacing: 20) {
-            Image(systemName: "headphones")
-                .font(.system(size: 52))
-                .foregroundStyle(.secondary)
+            AppIconView(size: 84)
             Text("Earmark").font(.largeTitle.weight(.semibold))
             Text("Sign in to Audible to reach your library.")
                 .foregroundStyle(.secondary)
