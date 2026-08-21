@@ -8,7 +8,9 @@ set -euo pipefail
 CONFIGURATION="${1:-release}"
 APP_NAME="Earmark"
 BUNDLE_ID="com.earmark.app"
-VERSION="0.1.0"
+# The one place the version is written. A bundle whose version disagrees with
+# the release it came from asks to update itself forever.
+VERSION="${EARMARK_VERSION:-1.0.0}"
 
 swift build -c "$CONFIGURATION"
 BIN_PATH="$(swift build -c "$CONFIGURATION" --show-bin-path)"
@@ -59,5 +61,5 @@ else
     codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
 fi
 
-echo "Built ${APP_DIR}"
+echo "Built ${APP_DIR} (version ${VERSION})"
 echo "Run it with: open ${APP_DIR}"
