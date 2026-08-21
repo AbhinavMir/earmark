@@ -257,6 +257,15 @@ final class AppModel {
 
         // Take the position Audible holds before starting, so a session begun
         // on the phone continues here rather than restarting.
+        // A downloaded title needs nothing from the network to start, so the
+        // position is fetched after playback begins rather than before it.
+        if let existing = await store.entry(entry.book.asin), let url = fileURL(for: existing) {
+            player.load(existing, url: url, source: .file(url))
+            player.play()
+            Task { await self.followRemotePositionIfNewer(existing.book.asin) }
+            return
+        }
+
         await pullPosition(for: entry.book.asin)
         guard !Task.isCancelled else { return }
         guard let fresh = await store.entry(entry.book.asin) else { return }
@@ -274,8 +283,10 @@ final class AppModel {
     /// Streams a title from `offset`, replacing any stream already running.
     private func startStream(of entry: LibraryEntry, from offset: TimeInterval) async {
         guard let client else { return }
+        let began = Date()
         do {
             let license = try await LicenseService(client: client).license(for: entry.book.asin)
+            let licensed = Date()
             guard !Task.isCancelled else { return }
             if !license.chapters.isEmpty {
                 await store.setChapters(license.chapters, for: entry.book.asin)
@@ -294,7 +305,12 @@ final class AppModel {
             let fresh = await store.entry(entry.book.asin) ?? entry
             player.load(fresh, url: started.playlistURL, source: .stream(offset: offset))
             player.play()
-            Log.write("Streaming \(entry.book.title) from \(Int(offset))s.")
+            Log.write(String(
+                format: "Ready to play %@: license %.1fs, stream %.1fs, total %.1fs",
+                entry.book.title,
+                licensed.timeIntervalSince(began),
+                Date().timeIntervalSince(licensed),
+                Date().timeIntervalSince(began)))
 
             // Keep what is being listened to. The stream holds nothing, so
             // without this the same audio is fetched again next time.
@@ -403,6 +419,21 @@ final class AppModel {
         } catch {
             // Fall through to the local position.
         }
+    }
+
+    /// Checks Audible's position after playback has begun, and moves to it
+    /// when the other device stopped later.
+    ///
+    /// A downloaded title starts at its local position at once. Waiting on the
+    /// network first would delay every play for a check that rarely changes
+    /// anything.
+    private func followRemotePositionIfNewer(_ asin: String) async {
+        await pullPosition(for: asin)
+        guard let entry = await store.entry(asin),
+              player.entry?.book.asin == asin,
+              abs(entry.position - player.position) > PositionService.conflictThreshold
+        else { return }
+        await followRemotePosition(for: asin)
     }
 
     /// Moves the running player onto a position the phone recorded later.
