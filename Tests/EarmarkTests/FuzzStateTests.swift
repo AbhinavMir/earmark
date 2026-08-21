@@ -46,10 +46,11 @@ struct StateFuzzTests {
             // A title never appears twice, whatever the order of actions.
             let ids = queue.jobs.map(\.asin)
             #expect(Set(ids).count == ids.count)
-            // Nothing already downloaded is ever queued.
+            // Nothing whose audio is on disk is ever queued. A mark without
+            // a file does not count: that title still needs fetching.
             for job in queue.jobs {
-                let entry = entries.first { $0.id == job.asin }
-                #expect(entry?.isDownloaded != true)
+                guard let entry = entries.first(where: { $0.id == job.asin }) else { continue }
+                #expect(!queue.hasFile(entry))
             }
             #expect(queue.visibleActiveCount <= queue.jobs.count)
         }

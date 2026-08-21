@@ -74,6 +74,17 @@ final class DownloadQueue {
         self.client = client
     }
 
+    /// True when this title's audio is actually on disk.
+    ///
+    /// The mark on a title says it was downloaded once. A file deleted in the
+    /// Finder leaves that mark behind, and trusting it alone meant refusing to
+    /// fetch a title whose audio was gone.
+    func hasFile(_ entry: LibraryEntry) -> Bool {
+        guard let fileName = entry.fileName else { return false }
+        return FileManager.default.fileExists(
+            atPath: audioDirectory.appendingPathComponent(fileName).path)
+    }
+
     /// True when this title is queued or downloading.
     func isQueued(_ asin: String) -> Bool {
         jobs.contains { $0.asin == asin && $0.state.isActive }
@@ -85,7 +96,7 @@ final class DownloadQueue {
     ///   Such a job stays out of the count on the toolbar, because nobody
     ///   asked for it and nobody is waiting on it.
     func enqueue(_ entries: [LibraryEntry], quietly: Bool = false) {
-        for entry in entries where !isQueued(entry.book.asin) && !entry.isDownloaded {
+        for entry in entries where !isQueued(entry.book.asin) && !hasFile(entry) {
             jobs.removeAll { $0.asin == entry.book.asin }
             jobs.append(DownloadJob(
                 asin: entry.book.asin, title: entry.book.title, isQuiet: quietly))
@@ -154,9 +165,7 @@ final class DownloadQueue {
         }
         // A title downloaded by an earlier run needs nothing further. Retrying
         // an old failure must not fetch a file that is already here.
-        if let fileName = entry.fileName,
-           FileManager.default.fileExists(
-               atPath: audioDirectory.appendingPathComponent(fileName).path) {
+        if hasFile(entry) {
             Log.write("\(entry.book.title) is already downloaded.")
             update(asin, .done)
             return

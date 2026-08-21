@@ -108,13 +108,34 @@ struct DownloadQueueTests {
         #expect(queue.jobs.filter { $0.state == .queued }.count == 48)
     }
 
-    @Test("A title already downloaded is not queued again")
-    func skipsDownloadedTitles() {
+    @Test("A title whose audio is on disk is not queued again")
+    func skipsDownloadedTitles() throws {
+        // The mark alone is not enough: a file deleted in the Finder leaves
+        // the mark behind, and that title must still be fetchable.
+        let audio = FileManager.default.temporaryDirectory
+            .appendingPathComponent("queue-audio-\(UUID().uuidString)", isDirectory: true)
+        let name = "Ada Marsh/Title.m4b"
+        let file = audio.appendingPathComponent(name)
+        try FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: audio) }
+
+        let entry = LibraryEntry(
+            book: Book(asin: "A", title: "Title", authors: ["Ada Marsh"]),
+            fileName: name)
+
         let queue = DownloadQueue(store: LibraryStore(
             fileURL: FileManager.default.temporaryDirectory
-                .appendingPathComponent("queue-test-\(UUID().uuidString).json")))
-        queue.enqueue([Self.entry("A", downloaded: true)])
+                .appendingPathComponent("queue-test-\(UUID().uuidString).json")),
+            audioDirectory: audio)
+        queue.enqueue([entry])
         #expect(queue.jobs.isEmpty)
+
+        // With the file gone, the same title is queued.
+        try FileManager.default.removeItem(at: file)
+        queue.enqueue([entry])
+        #expect(queue.jobs.count == 1)
     }
 
     @Test("Enqueuing the same title twice queues it once")
