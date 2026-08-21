@@ -50,6 +50,13 @@ The later recording wins, and only when the two sides differ by more than a
 minute. A desktop session left open for days cannot rewind your phone. When a
 remote position does move the player, Earmark says so and offers an undo.
 
+## Scope
+
+Earmark plays the titles your own Audible account owns, on your own Mac. It
+cannot reach anything your account does not already hold.
+
+The files it writes are yours to listen to. They are not yours to hand out.
+
 ## Status
 
 Registration, library, downloads, playback, bookmarks, and position reads work
