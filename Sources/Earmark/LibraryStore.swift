@@ -53,7 +53,7 @@ actor LibraryStore {
     func load() throws {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         let data = try Data(contentsOf: fileURL)
-        let stored = try JSONDecoder().decode([LibraryEntry].self, from: data)
+        let stored = try LibraryStore.decoder.decode([LibraryEntry].self, from: data)
         entries = Dictionary(uniqueKeysWithValues: stored.map { ($0.book.asin, $0) })
     }
 
@@ -61,7 +61,7 @@ actor LibraryStore {
         writePending = false
         try FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        let data = try JSONEncoder().encode(Array(entries.values))
+        let data = try LibraryStore.encoder.encode(Array(entries.values))
         // Write beside the target and swap, so a crash mid-write cannot leave
         // a truncated library behind.
         let temporary = fileURL.appendingPathExtension("writing")
@@ -79,13 +79,32 @@ actor LibraryStore {
         }
     }
 
+    /// Writes the library. A value that JSON cannot hold becomes text rather
+    /// than stopping the whole file being written.
+    ///
+    /// Nothing should reach this: values are checked on the way in. It is here
+    /// so that one bad number can never cost a library.
+    static let encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.nonConformingFloatEncodingStrategy = .convertToString(
+            positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
+        return encoder
+    }()
+
+    static let decoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.nonConformingFloatDecodingStrategy = .convertFromString(
+            positiveInfinity: "inf", negativeInfinity: "-inf", nan: "nan")
+        return decoder
+    }()
+
     // MARK: Updating
 
     /// Merges a freshly fetched library, keeping local state for titles that
     /// are already known and dropping titles the account no longer holds.
     func merge(_ books: [Book]) {
         var merged: [String: LibraryEntry] = [:]
-        for book in books {
+        for book in books.map(LibraryStore.storable) {
             if var existing = entries[book.asin] {
                 existing = LibraryEntry(
                     book: book,
@@ -108,18 +127,45 @@ actor LibraryStore {
     }
 
     func setChapters(_ chapters: [Chapter], for asin: String) {
-        entries[asin]?.chapters = chapters
+        entries[asin]?.chapters = chapters.filter {
+            $0.start.isFinite && $0.duration.isFinite
+        }
         saveSoon()
     }
 
+    /// A book whose figures can all be written.
+    static func storable(_ book: Book) -> Book {
+        guard let duration = book.duration, !duration.isFinite else { return book }
+        return Book(
+            asin: book.asin, title: book.title, subtitle: book.subtitle,
+            authors: book.authors, narrators: book.narrators, series: book.series,
+            publisher: book.publisher, duration: nil, releaseDate: book.releaseDate,
+            coverURL: book.coverURL, purchaseDate: book.purchaseDate,
+            isFinished: book.isFinished)
+    }
+
     func setPosition(_ position: TimeInterval, at date: Date = Date(), for asin: String) {
-        entries[asin]?.position = position
+        // JSON has no way to write a value that is not a number, so one stored
+        // here would make every later save fail, and the failure is not shown
+        // to anybody. Nothing that cannot be written is allowed in.
+        entries[asin]?.position = LibraryStore.storable(position)
         entries[asin]?.positionRecordedAt = date
         saveSoon()
     }
 
+    /// A number that can be written to the file, or zero.
+    static func storable(_ value: TimeInterval) -> TimeInterval {
+        guard value.isFinite, !value.isNaN else { return 0 }
+        return max(0, min(value, 60 * 60 * 24 * 30))
+    }
+
     func addBookmark(_ bookmark: Bookmark, to asin: String) {
-        entries[asin]?.bookmarks.append(bookmark)
+        let safe = Bookmark(
+            id: bookmark.id,
+            position: LibraryStore.storable(bookmark.position),
+            note: bookmark.note,
+            createdAt: bookmark.createdAt)
+        entries[asin]?.bookmarks.append(safe)
         saveSoon()
     }
 

@@ -1,5 +1,6 @@
 import Foundation
 import AVFoundation
+import AudibleKit
 
 /// Plays a local file through an audio graph, so speed, pitch, and tone can be
 /// changed while it plays.
@@ -52,6 +53,9 @@ final class EngineAudio {
         stop()
 
         let file = try AVAudioFile(forReading: url)
+        guard file.processingFormat.sampleRate > 0, file.length > 0 else {
+            throw AudibleError.decryptFailed("The file holds no audio.")
+        }
         self.file = file
         sampleRate = file.processingFormat.sampleRate
         duration = Double(file.length) / sampleRate
@@ -65,10 +69,16 @@ final class EngineAudio {
     }
 
     /// Points the graph at a place in the file.
+    ///
+    /// A place that is not a number, or is beyond what the file holds, is
+    /// treated as the start. Turning such a value into a frame count ends the
+    /// process, and every caller here takes its number from a player.
     private func schedule(from position: TimeInterval) {
-        guard let file else { return }
-        let start = AVAudioFramePosition(max(0, position) * sampleRate)
-        guard start < file.length else {
+        guard let file, sampleRate > 0 else { return }
+
+        let seconds = position.isFinite ? max(0, min(position, duration)) : 0
+        let start = AVAudioFramePosition(seconds * sampleRate)
+        guard start >= 0, start < file.length else {
             onFinish?()
             return
         }
@@ -116,6 +126,7 @@ final class EngineAudio {
     }
 
     func seek(to position: TimeInterval) {
+        guard file != nil else { return }
         let wasPlaying = isPlaying
         schedule(from: position)
         if wasPlaying {
@@ -125,23 +136,40 @@ final class EngineAudio {
 
     /// Where the file is now, measured from its start.
     var position: TimeInterval {
+        guard sampleRate > 0 else { return 0 }
         guard let time = node.lastRenderTime,
-              let played = node.playerTime(forNodeTime: time)
+              let played = node.playerTime(forNodeTime: time),
+              played.sampleRate > 0
         else {
             return Double(segmentStart) / sampleRate
         }
-        return Double(segmentStart + played.sampleTime) / played.sampleRate
+        let seconds = Double(segmentStart + played.sampleTime) / played.sampleRate
+        return seconds.isFinite ? max(0, seconds) : 0
     }
 
     // MARK: Effects
 
     /// Applies the current settings. Safe to call while playing.
     func apply(_ effects: AudioEffects) {
-        timePitch.rate = max(1.0 / 32, min(32, effects.rate))
-        timePitch.pitch = effects.pitch
-        equalizer.bands[0].gain = effects.bass
-        equalizer.bands[1].gain = effects.mid
-        equalizer.bands[2].gain = effects.treble
-        equalizer.globalGain = effects.gain
+        // Each unit refuses a value outside its own range, so nothing is
+        // passed on without being brought inside one. A setting can be edited
+        // by hand in the file it is stored in.
+        timePitch.rate = EngineAudio.clamp(effects.rate, 1.0 / 32, 32, fallback: 1)
+        timePitch.pitch = EngineAudio.clamp(effects.pitch, -2_400, 2_400, fallback: 0)
+        equalizer.bands[0].gain = EngineAudio.clamp(effects.bass, -96, 24, fallback: 0)
+        equalizer.bands[1].gain = EngineAudio.clamp(effects.mid, -96, 24, fallback: 0)
+        equalizer.bands[2].gain = EngineAudio.clamp(effects.treble, -96, 24, fallback: 0)
+        equalizer.globalGain = EngineAudio.clamp(effects.gain, -96, 24, fallback: 0)
+    }
+
+    /// A value inside a range, with a value that is not a number replaced.
+    static func clamp(
+        _ value: Float,
+        _ lowest: Float,
+        _ highest: Float,
+        fallback: Float
+    ) -> Float {
+        guard value.isFinite else { return fallback }
+        return min(highest, max(lowest, value))
     }
 }
