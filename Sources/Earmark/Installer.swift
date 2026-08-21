@@ -60,7 +60,7 @@ struct Installer: Sendable {
         let mounted = try mount(image)
         defer { unmount(mounted) }
 
-        let newApp = mounted.appendingPathComponent("Earmark.app")
+        let newApp = mounted.appendingPathComponent("Earmarky.app")
         guard FileManager.default.fileExists(atPath: newApp.path) else {
             throw AudibleError.downloadFailed("The disk image holds no application.")
         }
@@ -91,7 +91,7 @@ struct Installer: Sendable {
         let expected = http.expectedContentLength > 0 ? http.expectedContentLength : nil
 
         let file = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Earmark-\(release.version).dmg")
+            .appendingPathComponent("Earmarky-\(release.version).dmg")
         try? FileManager.default.removeItem(at: file)
         FileManager.default.createFile(atPath: file.path, contents: nil)
 
@@ -195,7 +195,7 @@ struct Installer: Sendable {
     private func replaceRunningApplication(with newApp: URL) throws {
         let running = Bundle.main.bundleURL
         let beside = running.deletingLastPathComponent()
-            .appendingPathComponent("Earmark-new-\(UUID().uuidString).app")
+            .appendingPathComponent("Earmarky-new-\(UUID().uuidString).app")
 
         try FileManager.default.copyItem(at: newApp, to: beside)
 

@@ -21,7 +21,7 @@ actor CoverCache {
 
     static var defaultDirectory: URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Earmark/Covers", isDirectory: true)
+        return base.appendingPathComponent("Earmarky/Covers", isDirectory: true)
     }
 
     private func fileURL(for asin: String) -> URL {

@@ -12,7 +12,7 @@ struct Release: Sendable, Hashable {
     /// nothing to keep in step.
     var downloadURL: URL {
         URL(string: "https://github.com/\(UpdateService.repository)"
-            + "/releases/download/v\(version)/Earmark-\(version).dmg")!
+            + "/releases/download/v\(version)/Earmarky-\(version).dmg")!
     }
 
     /// The page a person can read for themselves.
@@ -69,7 +69,7 @@ actor UpdateService {
 
     /// Names this application and its version, and nothing else.
     static func userAgent(for version: AppVersion) -> String {
-        "Earmark/\(version)"
+        "Earmarky/\(version)"
     }
 
     // MARK: Releases

@@ -1,7 +1,7 @@
 import Foundation
 import AudibleKit
 
-/// One title as Earmark holds it: what Audible said, plus what this Mac knows.
+/// One title as Earmarky holds it: what Audible said, plus what this Mac knows.
 struct LibraryEntry: Codable, Identifiable, Hashable, Sendable {
     let book: Book
     /// Where the decrypted file lives, once it exists.

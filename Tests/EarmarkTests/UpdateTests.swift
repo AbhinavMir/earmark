@@ -100,14 +100,14 @@ struct ReleaseReadingTests {
     func addresses() {
         let release = Release(version: AppVersion("1.3.0")!, notes: "")
         #expect(release.downloadURL.absoluteString
-                == "https://github.com/AbhinavMir/earmark/releases/download/v1.3.0/Earmark-1.3.0.dmg")
+                == "https://github.com/AbhinavMir/earmark/releases/download/v1.3.0/Earmarky-1.3.0.dmg")
         #expect(release.pageURL.absoluteString
                 == "https://github.com/AbhinavMir/earmark/releases/tag/v1.3.0")
     }
 
     @Test("The request names the application and nothing else")
     func userAgent() {
-        #expect(UpdateService.userAgent(for: AppVersion("1.2.3")!) == "Earmark/1.2.3")
+        #expect(UpdateService.userAgent(for: AppVersion("1.2.3")!) == "Earmarky/1.2.3")
     }
 }
 

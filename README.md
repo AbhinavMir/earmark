@@ -1,15 +1,15 @@
-<img src="icon.png" width="120" alt="Earmark">
+<img src="icon.png" width="120" alt="Earmarky">
 
-# Earmark
+# Earmarky
 
 A macOS native audiobook player for an Audible library.
 
-Earmark is a native application. Nothing runs in a browser, and nothing stops
+Earmarky is a native application. Nothing runs in a browser, and nothing stops
 when you quit one.
 
 ## What it does
 
-- Signs in once through Amazon's own page. Earmark never sees the password.
+- Signs in once through Amazon's own page. Earmarky never sees the password.
 - Lists the library, with search across title, author, narrator, and series.
 - Downloads titles, two at a time, and writes them to `~/Audiobooks` as M4B
   files with chapters and cover art. Any other player can open them.
@@ -35,7 +35,7 @@ and notarised, so it opens without a warning.
 ```
 git clone https://github.com/AbhinavMir/earmark
 cd earmark && ./build-app.sh
-open build/Earmark.app
+open build/Earmarky.app
 ```
 
 `AudibleKit` is fetched as a package, so this repository builds on its own.
@@ -54,26 +54,26 @@ asks again for anything it guards.
 
 - Credentials live in the macOS Keychain as one item.
 - Library state, positions, and bookmarks live in one JSON file under
-  `~/Library/Application Support/Earmark`.
-- Audio lives in `~/Audiobooks`, outside the application, so removing Earmark
+  `~/Library/Application Support/Earmarky`.
+- Audio lives in `~/Audiobooks`, outside the application, so removing Earmarky
   never removes your books.
 
 ## Position conflicts
 
 The later recording wins, and only when the two sides differ by more than a
 minute. A desktop session left open for days cannot rewind your phone. When a
-remote position does move the player, Earmark says so and offers an undo.
+remote position does move the player, Earmarky says so and offers an undo.
 
 ## Scope
 
-Earmark plays the titles your own Audible account owns, on your own Mac. It
+Earmarky plays the titles your own Audible account owns, on your own Mac. It
 cannot reach anything your account does not already hold.
 
 The files it writes are yours to listen to. They are not yours to hand out.
 
 ## Updates
 
-Earmark asks the releases page what exists and compares those versions with
+Earmarky asks the releases page what exists and compares those versions with
 its own. There is no update server, and nothing is sent about what is
 installed: a download address is worked out from a version rather than read
 from a list, so there is nothing to keep in step.

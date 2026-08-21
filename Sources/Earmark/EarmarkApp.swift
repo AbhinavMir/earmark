@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct EarmarkApp: App {
+struct EarmarkyApp: App {
     @State private var model = AppModel()
     @State private var updates = UpdateModel()
 

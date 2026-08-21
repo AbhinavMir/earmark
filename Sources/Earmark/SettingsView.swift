@@ -51,7 +51,7 @@ struct UpdateSettings: View {
 
             Section("Faulty builds") {
                 Toggle("Warn me about faulty builds", isOn: $updates.warnsAboutFaultyBuilds)
-                Text("Reads a short list from the Earmark site on launch and says so if "
+                Text("Reads a short list from the Earmarky site on launch and says so if "
                      + "this version is on it. Nothing is sent about what you have.")
                     .font(.caption)
                     .foregroundStyle(.secondary)

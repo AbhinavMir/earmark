@@ -158,7 +158,7 @@ struct ShotView: View {
             Circle().fill(Color(red: 1, green: 0.74, blue: 0.19)).frame(width: 11, height: 11)
             Circle().fill(Color(red: 0.16, green: 0.79, blue: 0.26)).frame(width: 11, height: 11)
             Spacer()
-            Text("Earmark").font(.system(size: 12, weight: .semibold))
+            Text("Earmarky").font(.system(size: 12, weight: .semibold))
             Spacer()
             HStack(spacing: 12) {
                 Image(systemName: "list.bullet")

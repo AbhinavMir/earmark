@@ -1,7 +1,7 @@
 import Foundation
 import AudibleKit
 
-/// Everything Earmark remembers between launches.
+/// Everything Earmarky remembers between launches.
 ///
 /// The library is a few hundred entries at most, so it is held in memory and
 /// written to one JSON file. Audio never goes in here; it stays as M4B files
@@ -22,8 +22,20 @@ actor LibraryStore {
     }
 
     static var applicationSupportDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Earmark", isDirectory: true)
+        let base = FileManager.default.urls(
+            for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let folder = base.appendingPathComponent("Earmarky", isDirectory: true)
+
+        // The application was once called Earmark, and its library and
+        // credentials are in a folder of that name. Moving them keeps a
+        // listener's place, rather than starting them over with nothing.
+        let former = base.appendingPathComponent("Earmark", isDirectory: true)
+        let manager = FileManager.default
+        if !manager.fileExists(atPath: folder.path),
+           manager.fileExists(atPath: former.path) {
+            try? manager.moveItem(at: former, to: folder)
+        }
+        return folder
     }
 
     /// Where decrypted audio is written. Readable by any other player.

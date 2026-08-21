@@ -4,7 +4,7 @@ import AudibleKit
 
 /// The one-time Amazon sign-in.
 ///
-/// Earmark shows Amazon's own page and never sees the password. It watches for
+/// Earmarky shows Amazon's own page and never sees the password. It watches for
 /// the redirect that carries the authorization code and registers the device
 /// with it.
 struct SignInView: View {
@@ -31,7 +31,7 @@ struct SignInView: View {
     private var chooseStore: some View {
         VStack(spacing: 20) {
             AppIconView(size: 84)
-            Text("Earmark").font(.largeTitle.weight(.semibold))
+            Text("Earmarky").font(.largeTitle.weight(.semibold))
             Text("Sign in to Audible to reach your library.")
                 .foregroundStyle(.secondary)
 
@@ -168,7 +168,7 @@ struct SignInView: View {
         isRegistering = true
         Task {
             do {
-                let name = "Earmark on \(ProcessInfo.processInfo.hostName)"
+                let name = "Earmarky on \(ProcessInfo.processInfo.hostName)"
                 let identity = try await DeviceRegistration(marketplace: marketplace)
                     .register(code: code, attempt: attempt, deviceName: name)
                 try FileCredentialStore().save(identity)

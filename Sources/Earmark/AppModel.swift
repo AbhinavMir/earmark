@@ -201,7 +201,7 @@ final class AppModel {
 
     /// Checks that each title marked as downloaded still has its file.
     ///
-    /// A file deleted outside Earmark must clear the mark; otherwise the
+    /// A file deleted outside Earmarky must clear the mark; otherwise the
     /// player would try to open a file that is not there.
     private func reconcileDownloadedFiles() async {
         for entry in await store.sortedEntries {

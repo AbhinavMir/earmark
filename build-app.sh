@@ -1,12 +1,12 @@
 #!/bin/bash
-# Builds Earmark.app from the SwiftPM executable.
+# Builds Earmarky.app from the SwiftPM executable.
 #
 # SwiftPM produces a plain binary. macOS needs a bundle for the Dock, the menu
 # bar, and the Now Playing panel, so this wraps the binary in one.
 set -euo pipefail
 
 CONFIGURATION="${1:-release}"
-APP_NAME="Earmark"
+APP_NAME="Earmarky"
 BUNDLE_ID="com.earmark.app"
 # The one place the version is written. A bundle whose version disagrees with
 # the release it came from asks to update itself forever.

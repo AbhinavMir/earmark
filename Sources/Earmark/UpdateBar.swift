@@ -9,7 +9,7 @@ struct UpdateBar: View {
         switch updates.state {
         case .available(let release):
             bar(tint: .blue, symbol: "arrow.down.circle.fill") {
-                Text("Earmark \(release.version) is available")
+                Text("Earmarky \(release.version) is available")
                     .font(.callout.weight(.medium))
             } actions: {
                 Button("Install") { Task { await updates.install(release) } }
@@ -32,9 +32,9 @@ struct UpdateBar: View {
         case .installed(let version):
             bar(tint: .green, symbol: "checkmark.circle.fill") {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("Earmark \(version) is ready")
+                    Text("Earmarky \(version) is ready")
                         .font(.callout.weight(.medium))
-                    Text("It takes effect when Earmark restarts.")
+                    Text("It takes effect when Earmarky restarts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
