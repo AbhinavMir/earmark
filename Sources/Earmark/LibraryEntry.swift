@@ -42,6 +42,36 @@ struct LibraryEntry: Codable, Identifiable, Hashable, Sendable {
         return min(1, position / duration)
     }
 
+    /// What is left to hear, at normal speed.
+    var remaining: TimeInterval? {
+        guard let duration = book.duration else { return nil }
+        return max(0, duration - position)
+    }
+
+    /// How far through, as a percentage, for a listener rather than a machine.
+    ///
+    /// A title barely started reads as 1 rather than 0, because 0 says
+    /// "untouched" and that would be wrong.
+    var percentText: String? {
+        guard let progress else { return nil }
+        if progress <= 0 { return nil }
+        return "\(max(1, Int(progress * 100)))%"
+    }
+
+    /// What is left, as hours and minutes.
+    var remainingText: String? {
+        guard let remaining, remaining > 0 else { return nil }
+        return LibraryEntry.hoursAndMinutes(remaining)
+    }
+
+    /// A length as hours and minutes, which is how a listener judges a book.
+    static func hoursAndMinutes(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds) / 60
+        let hours = total / 60
+        let minutes = total % 60
+        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+    }
+
     /// True once the listener is past the start but short of the end.
     var isInProgress: Bool {
         guard let progress else { return position > 0 }

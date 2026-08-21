@@ -80,10 +80,17 @@ struct BookRow: View {
                 .frame(width: 130, alignment: .trailing)
         } else if let progress = entry.progress, progress > 0.001 {
             HStack(spacing: 6) {
-                ProgressView(value: progress).frame(width: 60)
-                Text("\(Int(progress * 100))%")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                ProgressView(value: progress).frame(width: 52)
+                VStack(alignment: .trailing, spacing: 0) {
+                    Text(entry.percentText ?? "")
+                        .font(.caption.monospacedDigit())
+                    if let left = entry.remainingText {
+                        Text("\(left) left")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             .frame(width: 130, alignment: .trailing)
         } else {
@@ -142,11 +149,7 @@ struct BookRow: View {
         return "play.circle"
     }
 
-    /// A length as hours and minutes, which is how a listener judges a book.
     static func hoursAndMinutes(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds) / 60
-        let hours = total / 60
-        let minutes = total % 60
-        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+        LibraryEntry.hoursAndMinutes(seconds)
     }
 }

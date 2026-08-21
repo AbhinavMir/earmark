@@ -31,6 +31,9 @@ final class AppModel {
     let store: LibraryStore
     /// Covers on disk, so the library draws without the network.
     let covers = CoverCache()
+    /// The account's Audible plan, when it has one. The API reports no credit
+    /// balance, so the plan is what can be shown.
+    private(set) var membership: Membership?
     /// What the setup screen says it is doing.
     private(set) var setupMessage = "Reaching Audible..."
     /// How far setup has gone, from 0 to 1. Nil while the total is unknown.
@@ -151,11 +154,18 @@ final class AppModel {
             await reconcileDownloadedFiles()
             entries = await store.sortedEntries
             await pullPositions()
+            await loadMembership()
             try? await store.save()
         } catch {
             Log.write("Library refresh failed: \(error.localizedDescription)")
             banner = error.localizedDescription
         }
+    }
+
+    /// Reads the account's plan. A failure here is not worth a banner.
+    private func loadMembership() async {
+        guard let client else { return }
+        membership = try? await MembershipService(client: client).membership()
     }
 
     /// Fetches every cover that is not on disk yet, reporting progress.
@@ -198,6 +208,18 @@ final class AppModel {
 
     func download(_ entries: [LibraryEntry]) {
         queue.enqueue(entries)
+    }
+
+    /// Opens Audible in a browser, because buying happens there.
+    func openStore(path: String = "") {
+        let domain = client == nil ? "com" : "com"
+        guard let url = URL(string: "https://www.audible.\(domain)\(path)") else { return }
+        NSWorkspace.shared.open(url)
+    }
+
+    /// Opens the small player in its own window.
+    func showMiniPlayer() {
+        MiniPlayerWindow.shared.show(model: self)
     }
 
     /// Opens the audio file's folder, with the file selected.

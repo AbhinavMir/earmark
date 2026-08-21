@@ -44,8 +44,11 @@ struct LibraryView: View {
     @State private var search = ""
     @State private var selection: Set<String> = []
     @State private var showingQueue = false
+    /// Series are shown as a tree when the list is grouped that way.
+    @AppStorage("groupBySeries") private var groupBySeries = false
+    @State private var collapsedSeries: Set<String> = []
     /// Kept between launches, because it is a lasting preference.
-    @AppStorage("libraryLayout") private var layoutName = LibraryLayout.grid.rawValue
+    @AppStorage("libraryLayout") private var layoutName = LibraryLayout.list.rawValue
 
     private var layout: LibraryLayout {
         LibraryLayout(rawValue: layoutName) ?? .grid
@@ -172,17 +175,82 @@ struct LibraryView: View {
     private var list: some View {
         ScrollView {
             LazyVStack(spacing: 2) {
-                ForEach(visibleEntries) { entry in
-                    BookRow(
-                        entry: entry,
-                        isSelected: selection.contains(entry.id),
-                        onToggleSelection: { toggle(entry.id) })
-                        .onTapGesture(count: 2) { Task { await model.play(entry) } }
-                        .contextMenu { menu(for: entry) }
+                if groupBySeries {
+                    ForEach(groupedEntries, id: \.name) { group in
+                        seriesHeader(group)
+                        if !collapsedSeries.contains(group.name) {
+                            ForEach(group.entries) { entry in
+                                row(entry).padding(.leading, group.name == Self.loose ? 0 : 18)
+                            }
+                        }
+                    }
+                } else {
+                    ForEach(visibleEntries) { entry in row(entry) }
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
+        }
+    }
+
+    private func row(_ entry: LibraryEntry) -> some View {
+        BookRow(
+            entry: entry,
+            isSelected: selection.contains(entry.id),
+            onToggleSelection: { toggle(entry.id) })
+            .onTapGesture(count: 2) { Task { await model.play(entry) } }
+            .contextMenu { menu(for: entry) }
+    }
+
+    /// The heading for one series, which opens and closes it.
+    private func seriesHeader(_ group: (name: String, entries: [LibraryEntry])) -> some View {
+        let isOpen = !collapsedSeries.contains(group.name)
+        return Button {
+            if isOpen { collapsedSeries.insert(group.name) }
+            else { collapsedSeries.remove(group.name) }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    .foregroundStyle(.secondary)
+                Text(group.name)
+                    .font(.subheadline.weight(.semibold))
+                Text("\(group.entries.count)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Select") {
+                    group.entries.forEach { selection.insert($0.id) }
+                }
+                .buttonStyle(.plain)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+            .padding(.horizontal, 10)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Name used for titles that belong to no series.
+    static let loose = "Standalone"
+
+    /// Visible titles gathered by series, series first, in reading order.
+    private var groupedEntries: [(name: String, entries: [LibraryEntry])] {
+        var bySeries: [String: [LibraryEntry]] = [:]
+        for entry in visibleEntries {
+            bySeries[entry.book.series?.name ?? Self.loose, default: []].append(entry)
+        }
+        let series = bySeries.keys.filter { $0 != Self.loose }.sorted()
+        return (series + (bySeries[Self.loose] != nil ? [Self.loose] : [])).map { name in
+            let entries = (bySeries[name] ?? []).sorted {
+                ($0.book.series?.sortIndex ?? .greatestFiniteMagnitude)
+                    < ($1.book.series?.sortIndex ?? .greatestFiniteMagnitude)
+            }
+            return (name: name, entries: name == Self.loose ? (bySeries[name] ?? []) : entries)
         }
     }
 
@@ -230,6 +298,15 @@ struct LibraryView: View {
             .help("Covers or list")
         }
         ToolbarItem {
+            Button { groupBySeries.toggle() } label: {
+                Label("Group by Series",
+                      systemImage: groupBySeries
+                        ? "list.bullet.indent" : "list.bullet")
+            }
+            .disabled(layout == .grid)
+            .help("Group by series")
+        }
+        ToolbarItem {
             Button {
                 if selection.isEmpty {
                     selection = Set(visibleEntries.map(\.id))
@@ -267,6 +344,31 @@ struct LibraryView: View {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
             .disabled(model.isRefreshing)
+        }
+        ToolbarItem {
+            Menu {
+                Button("Browse Audible") { model.openStore() }
+                Button("Your Audible Library") { model.openStore(path: "/library/titles") }
+                if let membership = model.membership {
+                    Divider()
+                    Text(membership.name)
+                    if let bill = membership.nextBillText,
+                       let date = membership.nextBillDate {
+                        Text("Next: \(bill) on \(date.formatted(date: .abbreviated, time: .omitted))")
+                    }
+                }
+            } label: {
+                Label("Store", systemImage: "cart")
+            }
+            .help("Buy on Audible")
+        }
+        ToolbarItem {
+            Button { model.showMiniPlayer() } label: {
+                Label("Mini Player", systemImage: "rectangle.bottomthird.inset.filled")
+            }
+            .disabled(model.player.entry == nil)
+            .keyboardShortcut("m", modifiers: [.command, .shift])
+            .help("Mini player")
         }
     }
 }

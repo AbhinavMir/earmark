@@ -46,12 +46,33 @@ final class Player {
     /// length is unknown.
     private(set) var bufferedFraction: Double?
 
-    var rate: Float = 1.0 {
+    /// How the audio is shaped. Speed works everywhere; the rest needs the
+    /// engine, which needs a downloaded file.
+    var effects = AudioEffects() {
         didSet {
-            if isPlaying { player.rate = rate }
+            engine.apply(effects)
+            if isPlaying, !usingEngine { player.rate = effects.rate }
+            if effects.needsEngine, !usingEngine, canUseEngine {
+                switchToEngine()
+            }
             updateNowPlaying()
         }
     }
+
+    /// Speed on its own, which every source supports.
+    var rate: Float {
+        get { effects.rate }
+        set { effects.rate = newValue }
+    }
+
+    /// True when tone and pitch can be changed for what is loaded.
+    var canUseEngine: Bool {
+        if case .file = source { return true }
+        return false
+    }
+
+    /// True while the graph is doing the playing rather than AVPlayer.
+    private(set) var usingEngine = false
 
     var skipForward: TimeInterval = 30
     var skipBackward: TimeInterval = 15
@@ -67,12 +88,16 @@ final class Player {
     var onSeekBeyondStream: ((String, TimeInterval) -> Void)?
 
     private let player = AVPlayer()
+    private let engine = EngineAudio()
+    private var engineTicker: Timer?
+    private var fileURL: URL?
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObservers: [NSKeyValueObservation] = []
 
     init() {
         player.actionAtItemEnd = .pause
+        engine.onFinish = { [weak self] in self?.finish() }
         configureRemoteCommands()
     }
 
@@ -81,6 +106,8 @@ final class Player {
     /// Loads a title from `url`, which is either a local file or a playlist.
     func load(_ entry: LibraryEntry, url: URL, source: Source) {
         teardownObservers()
+        stopEngine()
+        fileURL = { if case .file = source { return url } else { return nil } }()
 
         let item = AVPlayerItem(url: url)
         // Speech stays intelligible at high rates with this algorithm.
@@ -109,6 +136,7 @@ final class Player {
 
     func unload() {
         pause()
+        stopEngine()
         teardownObservers()
         player.replaceCurrentItem(with: nil)
         entry = nil
@@ -123,6 +151,13 @@ final class Player {
 
     func play() {
         guard entry != nil else { return }
+        if usingEngine {
+            try? engine.play()
+            isPlaying = true
+            startEngineTicker()
+            updateNowPlaying()
+            return
+        }
         // Playing as soon as the buffer allows, rather than stalling silently
         // when it does not.
         player.automaticallyWaitsToMinimizeStalling = true
@@ -132,7 +167,11 @@ final class Player {
     }
 
     func pause() {
-        player.pause()
+        if usingEngine {
+            engine.pause()
+        } else {
+            player.pause()
+        }
         isPlaying = false
         reportPosition()
         updateNowPlaying()
@@ -148,6 +187,12 @@ final class Player {
         let target = max(0, min(seconds, duration > 0 ? duration : seconds))
 
         switch source {
+        case .file where usingEngine:
+            engine.seek(to: target)
+            position = target
+            reportPosition()
+            updateNowPlaying()
+
         case .file:
             player.seek(
                 to: CMTime(seconds: target, preferredTimescale: 600),
@@ -286,6 +331,64 @@ final class Player {
                 self?.finish()
             }
         }
+    }
+
+    // MARK: The engine
+
+    /// Moves playback onto the graph, keeping the place and whether it plays.
+    ///
+    /// The graph gives pitch and tone, which AVPlayer cannot do. It is only
+    /// used when asked for, because it needs a file and gives nothing extra
+    /// when the settings are flat.
+    private func switchToEngine() {
+        guard let fileURL, let entry, !usingEngine else { return }
+        let resumeAt = position
+        let wasPlaying = isPlaying
+
+        player.pause()
+        do {
+            try engine.load(fileURL, at: resumeAt)
+            engine.apply(effects)
+            usingEngine = true
+            duration = entry.book.duration ?? engine.duration
+            position = resumeAt
+            isBuffering = false
+            if wasPlaying { try engine.play(); isPlaying = true; startEngineTicker() }
+        } catch {
+            // The file could not be opened by the graph. AVPlayer keeps it.
+            usingEngine = false
+            if wasPlaying { player.rate = effects.rate }
+        }
+    }
+
+    private func stopEngine() {
+        engineTicker?.invalidate()
+        engineTicker = nil
+        engine.stop()
+        usingEngine = false
+    }
+
+    /// The graph has no time observer, so the position is read on a timer.
+    private func startEngineTicker() {
+        engineTicker?.invalidate()
+        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.usingEngine, self.isPlaying else { return }
+                self.tickEngine()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        engineTicker = timer
+    }
+
+    private func tickEngine() {
+        position = min(engine.position, duration > 0 ? duration : engine.duration)
+        if let deadline = sleepDeadline, Date() >= deadline {
+            sleepDeadline = nil
+            pause()
+            return
+        }
+        if Int(position) % 30 == 0 { reportPosition() }
     }
 
     private func teardownObservers() {

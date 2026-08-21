@@ -5,6 +5,7 @@ import AudibleKit
 struct PlayerBar: View {
     @Environment(AppModel.self) private var model
     @State private var showingChapters = false
+    @State private var showingEffects = false
     @State private var scrubbing: TimeInterval?
 
     private var player: Player { model.player }
@@ -31,6 +32,7 @@ struct PlayerBar: View {
                 transport
                 Spacer(minLength: 12)
                 speedControl
+                effectsButton
                 sleepControl
                 chapterButton
                 stopButton
@@ -130,14 +132,33 @@ struct PlayerBar: View {
         .help("Stop")
     }
 
+    /// Speed on a slider, because the useful values are between the ones a
+    /// menu offers.
     private var speedControl: some View {
-        Menu("\(player.rate, specifier: "%.2f")×") {
-            ForEach([0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 3.0], id: \.self) { rate in
-                Button("\(rate, specifier: "%.2f")×") { player.rate = Float(rate) }
-            }
+        HStack(spacing: 6) {
+            Slider(
+                value: Binding(
+                    get: { player.effects.rate },
+                    set: { model.player.effects.rate = $0 }),
+                in: AudioEffects.rateRange)
+                .frame(width: 96)
+                .help("Speed")
+            Text(String(format: "%.2f×", player.effects.rate))
+                .font(.caption.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 40, alignment: .leading)
         }
-        .menuStyle(.borderlessButton)
-        .frame(width: 66)
+    }
+
+    /// The rest of the sound controls, behind one button.
+    private var effectsButton: some View {
+        Button { showingEffects = true } label: {
+            Image(systemName: player.effects.needsEngine
+                  ? "slider.horizontal.3" : "slider.horizontal.below.rectangle")
+        }
+        .buttonStyle(.plain)
+        .help("Sound")
+        .popover(isPresented: $showingEffects) { EffectsPanel() }
     }
 
     private var sleepControl: some View {

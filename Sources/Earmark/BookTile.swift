@@ -22,6 +22,13 @@ struct BookTile: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            // How far in, and what is left, so a shelf can be read at a glance.
+            Text(statusLine)
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(8)
         .background(
@@ -138,6 +145,18 @@ struct BookTile: View {
             Divider()
             Text("\(entry.bookmarks.count) bookmarks")
         }
+    }
+
+    /// The small line under the author.
+    private var statusLine: String {
+        if entry.isFinished { return "Finished" }
+        if let percent = entry.percentText, let left = entry.remainingText {
+            return "\(percent) · \(left) left"
+        }
+        if let total = entry.book.duration {
+            return LibraryEntry.hoursAndMinutes(total)
+        }
+        return " "
     }
 
     /// True when this title is the one loaded or being prepared.

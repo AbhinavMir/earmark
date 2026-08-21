@@ -66,3 +66,101 @@ struct LibraryEntryTests {
         #expect(entry.isDownloaded)
     }
 }
+
+@Suite("Progress shown to a listener")
+struct ProgressTextTests {
+
+    static func entry(position: TimeInterval, duration: TimeInterval?) -> LibraryEntry {
+        LibraryEntry(
+            book: Book(asin: "A", title: "T", duration: duration),
+            position: position)
+    }
+
+    @Test("Progress reads as a percentage")
+    func percentText() {
+        #expect(Self.entry(position: 1800, duration: 3600).percentText == "50%")
+    }
+
+    @Test("A title barely started reads as one percent, not none")
+    func neverRoundsDownToZero() {
+        // Zero would say "untouched", which is a different thing.
+        #expect(Self.entry(position: 5, duration: 3600).percentText == "1%")
+    }
+
+    @Test("An untouched title has no percentage to show")
+    func untouchedHasNoPercent() {
+        #expect(Self.entry(position: 0, duration: 3600).percentText == nil)
+    }
+
+    @Test("What is left reads as hours and minutes")
+    func remainingText() {
+        #expect(Self.entry(position: 3600, duration: 3600 * 4).remainingText == "3h 0m")
+        #expect(Self.entry(position: 0, duration: 1500).remainingText == "25m")
+    }
+
+    @Test("A finished title has nothing left to show")
+    func finishedHasNoRemaining() {
+        #expect(Self.entry(position: 3600, duration: 3600).remainingText == nil)
+    }
+
+    @Test("A title of unknown length shows neither figure")
+    func unknownLength() {
+        let entry = Self.entry(position: 100, duration: nil)
+        #expect(entry.percentText == nil)
+        #expect(entry.remainingText == nil)
+        #expect(entry.remaining == nil)
+    }
+
+    @Test("Past the end, nothing is left rather than a negative")
+    func neverNegative() {
+        #expect(Self.entry(position: 7200, duration: 3600).remaining == 0)
+    }
+}
+
+@Suite("Sound settings")
+struct AudioEffectsTests {
+
+    @Test("Flat settings change nothing")
+    func flatIsFlat() {
+        #expect(AudioEffects.flat.isFlat)
+        #expect(!AudioEffects.flat.needsEngine)
+    }
+
+    @Test("Speed alone does not need the engine")
+    func speedAloneStaysOnAVPlayer() {
+        // Speed works on a stream. Pitch and tone need a file.
+        var effects = AudioEffects()
+        effects.rate = 2.0
+        #expect(!effects.needsEngine)
+        #expect(!effects.isFlat)
+    }
+
+    @Test("Pitch and tone need the engine")
+    func toneNeedsEngine() {
+        var effects = AudioEffects()
+        effects.pitch = 100
+        #expect(effects.needsEngine)
+
+        var tone = AudioEffects()
+        tone.treble = 3
+        #expect(tone.needsEngine)
+    }
+
+    @Test("Every preset stays inside the ranges the interface offers")
+    func presetsAreInRange() {
+        for preset in AudioEffects.presets {
+            let e = preset.effects
+            #expect(AudioEffects.rateRange.contains(e.rate))
+            #expect(AudioEffects.pitchRange.contains(e.pitch))
+            #expect(AudioEffects.bandRange.contains(e.bass))
+            #expect(AudioEffects.bandRange.contains(e.mid))
+            #expect(AudioEffects.bandRange.contains(e.treble))
+            #expect(AudioEffects.gainRange.contains(e.gain))
+        }
+    }
+
+    @Test("The first preset is the one that changes nothing")
+    func firstPresetIsFlat() {
+        #expect(AudioEffects.presets.first?.effects.isFlat == true)
+    }
+}
