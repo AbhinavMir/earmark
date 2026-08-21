@@ -27,13 +27,17 @@ when you quit one.
 
 ```
 git clone https://github.com/AbhinavMir/earmark
-git clone https://github.com/AbhinavMir/audible-kit
 cd earmark && ./build-app.sh
 open build/Earmark.app
 ```
 
-`AudibleKit` is a sibling checkout, so both repositories sit in the same
-folder.
+`AudibleKit` is fetched as a package, so this repository builds on its own.
+To work on both at once, check the package out beside it:
+
+```
+git clone https://github.com/AbhinavMir/audible-kit ../audible-kit
+swift package edit AudibleKit --path ../audible-kit
+```
 
 The build signs with a Developer ID when the machine has one, and falls back
 to an ad-hoc signature. An ad-hoc signature changes with every build, so macOS
