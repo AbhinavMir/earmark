@@ -164,9 +164,12 @@ struct Installer: Sendable {
     func verify(_ application: URL) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        // The requirement goes in the same argument as the flag. Given as a
+        // separate one it is read as the name of a file, and codesign stops
+        // with "invalid requirement specification" before it checks anything.
         process.arguments = [
             "--verify", "--deep", "--strict",
-            "-R", Installer.requirement,
+            "-R=\(Installer.requirement)",
             application.path
         ]
         let errors = Pipe()

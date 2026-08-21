@@ -282,3 +282,46 @@ struct CheckIntervalTests {
         #expect(never == nil)
     }
 }
+
+@Suite("The signature check actually runs")
+struct RequirementFormTests {
+
+    /// Runs codesign the way the installer does, and reports what happened.
+    static func check(_ path: String) -> (status: Int32, output: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.arguments = [
+            "--verify", "--deep", "--strict",
+            "-R=\(Installer.requirement)",
+            path
+        ]
+        let errors = Pipe()
+        process.standardError = errors
+        process.standardOutput = Pipe()
+        try? process.run()
+        let text = String(
+            data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        process.waitUntilExit()
+        return (process.terminationStatus, text)
+    }
+
+    @Test("The requirement is understood, not read as a file name")
+    func requirementIsUnderstood() {
+        // Given as a separate argument, the requirement is read as the name of
+        // a file and codesign stops before it checks anything. That refuses
+        // every update, including the right ones.
+        let result = Self.check("/System/Applications/Calculator.app")
+        #expect(!result.output.contains("invalid requirement"),
+                "the requirement was not understood: \(result.output)")
+        #expect(!result.output.contains("No such file"),
+                "the requirement was read as a file name: \(result.output)")
+    }
+
+    @Test("An application by another developer is refused for the right reason")
+    func foreignApplicationRefused() {
+        let result = Self.check("/System/Applications/Calculator.app")
+        #expect(result.status != 0)
+        #expect(result.output.contains("failed to satisfy"),
+                "refused for the wrong reason: \(result.output)")
+    }
+}
