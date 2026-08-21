@@ -58,7 +58,7 @@ enum PromoShot {
         ]
 
         for (name, scene) in scenes {
-            let renderer = ImageRenderer(content: scene.frame(width: 1_200, height: 790))
+            let renderer = ImageRenderer(content: scene)
             renderer.scale = 2
             guard let image = renderer.nsImage,
                   let data = image.tiffRepresentation,
@@ -87,7 +87,6 @@ enum PromoShot {
         }
 
         let view = ShotView(entries: shown, artwork: artwork)
-            .frame(width: 1_200, height: 790)
 
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
@@ -121,20 +120,21 @@ struct ShotView: View {
     var showsSound = false
 
     var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.16, green: 0.82, blue: 0.78),
-                         Color(red: 0.10, green: 0.62, blue: 0.60)],
-                startPoint: .topLeading, endPoint: .bottomTrailing)
-
-            window
-                .frame(width: 1_020)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .shadow(color: .black.opacity(0.28), radius: 30, y: 14)
-                .overlay(alignment: .bottomTrailing) {
-                    if showsSound { soundPanel.padding(.trailing, 26).padding(.bottom, 74) }
-                }
-        }
+        window
+            .frame(width: 1_040)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .shadow(color: .black.opacity(0.30), radius: 34, y: 16)
+            .overlay(alignment: .bottomTrailing) {
+                if showsSound { soundPanel.padding(.trailing, 26).padding(.bottom, 76) }
+            }
+            // The same air on every side. The picture takes its size from
+            // what is in it rather than being cut to fit a shape.
+            .padding(84)
+            .background(
+                LinearGradient(
+                    colors: [Color(red: 0.05, green: 0.20, blue: 0.20),
+                             Color(red: 0.02, green: 0.13, blue: 0.13)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
     }
 
     private var window: some View {
