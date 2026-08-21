@@ -11,7 +11,7 @@ let package = Package(
         // Fetched by name, so a clone of this repository alone builds. Point
         // it at a sibling checkout to work on both at once:
         //   swift package edit AudibleKit --path ../audible-kit
-        .package(url: "https://github.com/AbhinavMir/audible-kit", from: "0.4.1")
+        .package(url: "https://github.com/AbhinavMir/audible-kit", from: "0.4.3")
     ],
     targets: [
         .executableTarget(

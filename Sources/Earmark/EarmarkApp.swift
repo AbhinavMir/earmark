@@ -3,16 +3,28 @@ import SwiftUI
 @main
 struct EarmarkApp: App {
     @State private var model = AppModel()
+    @State private var updates = UpdateModel()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
+                .environment(updates)
                 .frame(minWidth: 900, minHeight: 560)
                 .task { await model.start() }
+                .task { await updates.onLaunch() }
         }
         .windowToolbarStyle(.unified)
+
+        Settings {
+            SettingsView().environment(updates)
+        }
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    Task { await updates.check() }
+                }
+            }
             CommandGroup(after: .toolbar) {
                 Button("Play or Pause") { model.player.togglePlayPause() }
                     .keyboardShortcut(.space, modifiers: [])
@@ -32,8 +44,22 @@ struct EarmarkApp: App {
 
 struct RootView: View {
     @Environment(AppModel.self) private var model
+    @Environment(UpdateModel.self) private var updates
 
     var body: some View {
+        VStack(spacing: 0) {
+            // A version known to be harmful says so before anything else, and
+            // says it whatever the settings are.
+            if let recall = updates.recall {
+                RecallBanner(recall: recall)
+                Divider()
+            }
+            stage
+        }
+    }
+
+    @ViewBuilder
+    private var stage: some View {
         switch model.stage {
         case .checkingCredentials:
             ProgressView().controlSize(.large)
