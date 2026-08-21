@@ -14,7 +14,7 @@ struct Installer: Sendable {
     /// developer, and the anchor keeps it to a certificate Apple issued.
     /// Without the identifier, any application by this developer would pass;
     /// without the team, any signed application would.
-    static let requirement = "identifier \"com.earmark.app\" "
+    static let requirement = "identifier \"com.earmarky.app\" "
         + "and anchor apple generic "
         + "and certificate leaf[subject.OU] = \"P4ANTPX4G4\""
 

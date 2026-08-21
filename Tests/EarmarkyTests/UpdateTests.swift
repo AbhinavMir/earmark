@@ -194,7 +194,7 @@ struct InstallerTests {
     func requirementIsSpecific() {
         // Without the identifier, any application by this developer would
         // pass. Without the team, any signed application would.
-        #expect(Installer.requirement.contains("com.earmark.app"))
+        #expect(Installer.requirement.contains("com.earmarky.app"))
         #expect(Installer.requirement.contains("P4ANTPX4G4"))
         #expect(Installer.requirement.contains("anchor apple generic"))
     }

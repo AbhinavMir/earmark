@@ -7,7 +7,7 @@ set -euo pipefail
 
 CONFIGURATION="${1:-release}"
 APP_NAME="Earmarky"
-BUNDLE_ID="com.earmark.app"
+BUNDLE_ID="com.earmarky.app"
 # The one place the version is written. A bundle whose version disagrees with
 # the release it came from asks to update itself forever.
 VERSION="${EARMARK_VERSION:-1.0.0}"
