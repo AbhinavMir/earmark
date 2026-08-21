@@ -255,7 +255,7 @@ struct LibraryView: View {
     }
 
     private var selectedEntries: [LibraryEntry] {
-        selection.compactMap { id in model.entries.first { $0.id == id } }
+        model.entries(withIDs: selection)
     }
 
     /// Selected titles that are not already downloaded or queued.

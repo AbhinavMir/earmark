@@ -176,7 +176,7 @@ struct BookTile: View {
 
     @ViewBuilder
     private var badge: some View {
-        if let job = model.queue.jobs.first(where: { $0.asin == entry.id && $0.state.isActive }) {
+        if let job = model.queue.activeByASIN[entry.id] {
             Image(systemName: job.state == .decrypting ? "gearshape" : "arrow.down.circle.fill")
                 .symbolEffect(.pulse)
                 .foregroundStyle(.white, .blue)

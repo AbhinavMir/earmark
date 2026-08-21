@@ -19,7 +19,18 @@ final class AppModel {
     }
 
     private(set) var stage: Stage = .checkingCredentials
-    private(set) var entries: [LibraryEntry] = []
+    private(set) var entries: [LibraryEntry] = [] {
+        didSet {
+            entriesByID = Dictionary(
+                entries.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        }
+    }
+    /// The same titles, by identifier.
+    ///
+    /// Finding a title by walking the whole library, once per selected title,
+    /// is work that grows with the square of the library, and it runs every
+    /// time anything on screen changes.
+    private(set) var entriesByID: [String: LibraryEntry] = [:]
     private(set) var isRefreshing = false
     /// The most recent failure, shown in place rather than as an alert.
     var banner: String?
@@ -234,7 +245,7 @@ final class AppModel {
             try? FileManager.default.removeItem(at: url)
         }
         await store.setFileName(nil, for: entry.book.asin)
-        entries = await store.sortedEntries
+        if let updated = await store.entry(entry.book.asin) { replace(updated) }
     }
 
     // MARK: Playback
@@ -318,7 +329,7 @@ final class AppModel {
             guard !Task.isCancelled else { return }
             if !license.chapters.isEmpty {
                 await store.setChapters(license.chapters, for: entry.book.asin)
-                entries = await store.sortedEntries
+                if let updated = await store.entry(entry.book.asin) { replace(updated) }
             }
 
             let service = try StreamService()
@@ -387,9 +398,25 @@ final class AppModel {
     private func recordPosition(_ position: TimeInterval, for asin: String) {
         Task {
             await store.setPosition(position, for: asin)
-            entries = await store.sortedEntries
+            // One title moved, so one row changes. Replacing the whole list
+            // makes every row on screen rebuild, twice a minute, while a book
+            // is playing.
+            if let updated = await store.entry(asin) { replace(updated) }
             await pushPosition(position, for: asin)
         }
+    }
+
+    /// The titles with these identifiers, in the order they are on screen.
+    func entries(withIDs ids: Set<String>) -> [LibraryEntry] {
+        guard !ids.isEmpty else { return [] }
+        return entries.filter { ids.contains($0.id) }
+    }
+
+    /// Puts one title back in the list, leaving the rest alone.
+    private func replace(_ entry: LibraryEntry) {
+        guard let index = entries.firstIndex(where: { $0.id == entry.id }) else { return }
+        guard entries[index] != entry else { return }
+        entries[index] = entry
     }
 
     // MARK: Bookmarks
@@ -398,12 +425,12 @@ final class AppModel {
         guard let entry = player.entry else { return }
         let bookmark = Bookmark(position: player.position, note: note)
         await store.addBookmark(bookmark, to: entry.book.asin)
-        entries = await store.sortedEntries
+        if let updated = await store.entry(entry.book.asin) { replace(updated) }
     }
 
     func removeBookmark(_ id: UUID, from asin: String) async {
         await store.removeBookmark(id, from: asin)
-        entries = await store.sortedEntries
+        if let updated = await store.entry(asin) { replace(updated) }
     }
 
     // MARK: Position sync
@@ -427,7 +454,9 @@ final class AppModel {
         do {
             let remote = try await PositionService(client: client).positions(for: asins)
             let changed = await store.applyRemotePositions(remote)
-            entries = await store.sortedEntries
+            for asin in changed {
+                if let updated = await store.entry(asin) { replace(updated) }
+            }
             // A title being listened to now is the one worth mentioning.
             if let playing = player.entry?.book.asin, changed.contains(playing) {
                 await followRemotePosition(for: playing)
@@ -442,8 +471,9 @@ final class AppModel {
         guard let client else { return }
         do {
             let remote = try await PositionService(client: client).positions(for: [asin])
-            _ = await store.applyRemotePositions(remote)
-            entries = await store.sortedEntries
+            for asin in await store.applyRemotePositions(remote) {
+                if let updated = await store.entry(asin) { replace(updated) }
+            }
         } catch {
             // Fall through to the local position.
         }

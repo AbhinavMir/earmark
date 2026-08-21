@@ -50,7 +50,17 @@ struct DownloadJob: Identifiable, Sendable {
 @MainActor
 @Observable
 final class DownloadQueue {
-    private(set) var jobs: [DownloadJob] = []
+    private(set) var jobs: [DownloadJob] = [] {
+        didSet { activeByASIN = Dictionary(
+            jobs.filter(\.state.isActive).map { ($0.asin, $0) },
+            uniquingKeysWith: { first, _ in first }) }
+    }
+    /// The work still going on, by title.
+    ///
+    /// Every row on screen asks whether its title is being fetched. Walking
+    /// the queue once per row is work that grows with both, and it happens
+    /// again every time any job moves on.
+    private(set) var activeByASIN: [String: DownloadJob] = [:]
 
     /// How many titles download at once. More than this competes for bandwidth
     /// without finishing any title sooner.
@@ -87,7 +97,7 @@ final class DownloadQueue {
 
     /// True when this title is queued or downloading.
     func isQueued(_ asin: String) -> Bool {
-        jobs.contains { $0.asin == asin && $0.state.isActive }
+        activeByASIN[asin] != nil
     }
 
     /// Adds titles that are not already queued or downloaded.

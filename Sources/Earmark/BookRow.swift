@@ -68,7 +68,7 @@ struct BookRow: View {
     /// Where the listener is, or what the queue is doing with this title.
     @ViewBuilder
     private var statusColumn: some View {
-        if let job = model.queue.jobs.first(where: { $0.asin == entry.id && $0.state.isActive }) {
+        if let job = model.queue.activeByASIN[entry.id] {
             Text(job.state.label)
                 .font(.caption)
                 .foregroundStyle(.secondary)
