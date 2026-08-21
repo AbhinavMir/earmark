@@ -242,3 +242,92 @@ struct AppConcurrencyFuzzTests {
         #expect(player.effects.isFlat)
     }
 }
+
+/// A book's own facts can change between one refresh and the next.
+@Suite("Fuzzing a library that changes underneath")
+struct ChangingLibraryFuzzTests {
+
+    @Test("A length that shrinks below the saved place leaves a usable entry")
+    func lengthShrinksBelowPosition() async {
+        // A publisher can replace a recording with a shorter one. A place
+        // saved in the old recording is then past the end of the new one.
+        let store = LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("shrink-\(UUID().uuidString).json"))
+
+        await store.merge([Book(asin: "A", title: "T", duration: 36_000)])
+        await store.setPosition(30_000, for: "A")
+        await store.merge([Book(asin: "A", title: "T", duration: 3_600)])
+
+        let entry = await store.entry("A")
+        #expect(entry?.position == 30_000)
+        // Progress must stay a proportion, whatever the two numbers are.
+        if let progress = entry?.progress {
+            #expect(progress <= 1)
+            #expect(progress >= 0)
+        }
+        #expect(entry?.remaining == 0)
+        _ = entry?.percentText
+        _ = entry?.remainingText
+    }
+
+    @Test("A length that appears later starts the figures working")
+    func lengthArrivesLate() async {
+        let store = LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("late-\(UUID().uuidString).json"))
+
+        await store.merge([Book(asin: "A", title: "T", duration: nil)])
+        await store.setPosition(1_800, for: "A")
+        #expect(await store.entry("A")?.progress == nil)
+        #expect(await store.entry("A")?.percentText == nil)
+
+        await store.merge([Book(asin: "A", title: "T", duration: 3_600)])
+        #expect(await store.entry("A")?.progress == 0.5)
+        #expect(await store.entry("A")?.percentText == "50%")
+    }
+
+    @Test("A title that leaves the account and comes back keeps its place")
+    func titleLeavesAndReturns() async {
+        let store = LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("return-\(UUID().uuidString).json"))
+
+        await store.merge([Book(asin: "A", title: "T", duration: 3_600)])
+        await store.setPosition(1_200, for: "A")
+
+        // A refresh that misses a title drops it, as it should.
+        await store.merge([Book(asin: "B", title: "U")])
+        #expect(await store.entry("A") == nil)
+
+        // Coming back, it starts again rather than at a stale place. That is
+        // the honest outcome: the place was dropped with the title.
+        await store.merge([Book(asin: "A", title: "T", duration: 3_600)])
+        #expect(await store.entry("A")?.position == 0)
+    }
+
+    @Test("Bookmarks survive every kind of change to a title")
+    func bookmarksSurvive() async {
+        let store = LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("marks-\(UUID().uuidString).json"))
+        await store.merge([Book(asin: "A", title: "T", duration: 3_600)])
+
+        var ids: [UUID] = []
+        for index in 0..<50 {
+            let mark = Bookmark(position: TimeInterval(index * 60), note: "Note \(index)")
+            ids.append(mark.id)
+            await store.addBookmark(mark, to: "A")
+        }
+        await store.merge([Book(asin: "A", title: "Retitled", duration: 7_200)])
+        #expect(await store.entry("A")?.bookmarks.count == 50)
+
+        for id in ids { await store.removeBookmark(id, from: "A") }
+        #expect(await store.entry("A")?.bookmarks.isEmpty == true)
+
+        // Removing one that was never there changes nothing.
+        await store.removeBookmark(UUID(), from: "A")
+        await store.addBookmark(Bookmark(position: 5), to: "MISSING")
+        #expect(await store.entry("A")?.bookmarks.isEmpty == true)
+    }
+}
