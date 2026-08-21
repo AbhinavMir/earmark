@@ -133,3 +133,112 @@ struct StateFuzzTests {
         }
     }
 }
+
+/// Hammers the pieces the interface touches from several places at once.
+@Suite("Fuzzing the application under load")
+struct AppConcurrencyFuzzTests {
+
+    @Test("A store written from everywhere at once keeps one entry per title")
+    func storeUnderLoad() async {
+        let store = LibraryStore(
+            fileURL: FileManager.default.temporaryDirectory
+                .appendingPathComponent("load-\(UUID().uuidString).json"))
+        await store.merge((0..<40).map {
+            Book(asin: "B\($0)", title: "Title \($0)", duration: 3600)
+        })
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<120 {
+                group.addTask {
+                    let asin = "B\(index % 40)"
+                    switch index % 5 {
+                    case 0: await store.setPosition(TimeInterval(index * 7), for: asin)
+                    case 1: await store.setFileName("Ada/\(asin).m4b", for: asin)
+                    case 2: await store.addBookmark(Bookmark(position: 12), to: asin)
+                    case 3: _ = await store.applyRemotePositions([
+                        asin: ListeningPosition(
+                            asin: asin, position: TimeInterval(index), recordedAt: Date())
+                    ])
+                    default: _ = await store.sortedEntries
+                    }
+                }
+            }
+        }
+
+        let entries = await store.sortedEntries
+        #expect(entries.count == 40)
+        #expect(Set(entries.map(\.book.asin)).count == 40)
+        for entry in entries {
+            #expect(entry.position.isFinite)
+            #expect(entry.position >= 0)
+        }
+    }
+
+    @Test("Saving while writing leaves a file that reads back")
+    func savingUnderLoad() async throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("save-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let store = LibraryStore(fileURL: url)
+        await store.merge((0..<30).map { Book(asin: "B\($0)", title: "T\($0)") })
+
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<60 {
+                group.addTask {
+                    await store.setPosition(TimeInterval(index), for: "B\(index % 30)")
+                    if index % 10 == 0 { try? await store.save() }
+                }
+            }
+        }
+        try await store.save()
+
+        // Whatever order the writes landed in, the file must be whole.
+        let reloaded = LibraryStore(fileURL: url)
+        try await reloaded.load()
+        #expect(await reloaded.entries.count == 30)
+    }
+
+    @Test("The player survives every order of transport calls")
+    @MainActor
+    func playerTransportInAnyOrder() {
+        let player = Player()
+        var state: UInt64 = 12345
+        func roll(_ bound: Int) -> Int {
+            state ^= state << 13; state ^= state >> 7; state ^= state << 17
+            return Int(state % UInt64(bound))
+        }
+
+        for _ in 0..<300 {
+            switch roll(9) {
+            case 0: player.play()
+            case 1: player.pause()
+            case 2: player.togglePlayPause()
+            case 3: player.skipAhead()
+            case 4: player.skipBack()
+            case 5: player.nextChapter()
+            case 6: player.previousChapter()
+            case 7: player.seek(to: TimeInterval(roll(100_000)) - 50_000)
+            default: player.unload()
+            }
+            #expect(player.position.isFinite)
+            #expect(player.duration.isFinite)
+            #expect(player.effects.rate.isFinite)
+        }
+    }
+
+    @Test("Sound settings can be changed in any order while nothing plays")
+    @MainActor
+    func effectsInAnyOrder() {
+        let player = Player()
+        for value in [Float(0.5), 3.0, 1.0, -1, 1e9, 0.75] {
+            player.effects.rate = value
+            player.effects.pitch = value * 100
+            player.effects.bass = value
+            player.rate = value
+            #expect(player.effects.rate == value)
+        }
+        player.effects = .flat
+        #expect(player.effects.isFlat)
+    }
+}
