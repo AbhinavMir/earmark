@@ -25,7 +25,22 @@ actor CoverCache {
     }
 
     private func fileURL(for asin: String) -> URL {
-        directory.appendingPathComponent("\(asin).img")
+        directory.appendingPathComponent("\(CoverCache.fileName(for: asin)).img")
+    }
+
+    /// A name that stays inside the cache folder.
+    ///
+    /// An identifier comes from a server. One carrying a path would otherwise
+    /// write a file wherever it pointed: "../x" leaves the folder entirely.
+    /// Only the characters an identifier really uses are kept, and anything
+    /// else becomes a digest of the original, which stays unique.
+    static func fileName(for asin: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let cleaned = String(asin.unicodeScalars.filter { allowed.contains($0) })
+        guard !cleaned.isEmpty, cleaned == asin, cleaned.utf8.count <= 100 else {
+            return "id-\(abs(asin.hashValue))"
+        }
+        return cleaned
     }
 
     /// True when this title's cover is already on disk.
