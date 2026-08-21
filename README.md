@@ -1,8 +1,6 @@
 # Earmark
 
-A macOS audiobook player for an Audible library. It downloads titles you own,
-stores them as plain M4B files, plays them, and keeps your place in step with
-the Audible application on your phone.
+A macOS native audiobook player for an Audible library.
 
 Earmark is a native application. Nothing runs in a browser, and nothing stops
 when you quit one.
