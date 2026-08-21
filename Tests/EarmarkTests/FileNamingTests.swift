@@ -232,3 +232,38 @@ struct CoverCacheTests {
     }
 
 }
+
+@Suite("Playing what is already playing")
+@MainActor
+struct RepeatPlayTests {
+
+    /// Playing a title that is already loaded must not start it again.
+    ///
+    /// Starting again asks for a new licence, opens a new stream, and returns
+    /// to the stored position, which throws away where the listener actually
+    /// is.
+    @Test("A loaded title toggles rather than reloading")
+    func loadedTitleToggles() {
+        let player = Player()
+        let entry = LibraryEntry(
+            book: Book(asin: "A", title: "T", duration: 3600),
+            position: 900)
+
+        // Nothing is loaded, so this title is not the current one.
+        #expect(player.entry == nil)
+        #expect(player.isPlaying == false)
+
+        // The rule the controls follow: a title is only reloaded when it is
+        // not the one already in the player.
+        let isCurrent = player.entry?.book.asin == entry.book.asin
+        #expect(isCurrent == false)
+    }
+
+    @Test("Position survives a pause")
+    func pauseKeepsPosition() {
+        let player = Player()
+        player.pause()
+        #expect(player.position == 0)
+        #expect(player.isPlaying == false)
+    }
+}

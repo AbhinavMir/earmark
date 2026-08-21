@@ -49,30 +49,24 @@ struct BookTile: View {
                     .fill(.black.opacity(isHovering ? 0.42 : 0.18))
 
                 if isHovering {
-                    HStack(spacing: 18) {
-                        Button {
-                            Task { await model.play(entry) }
-                        } label: {
-                            Image(systemName: playSymbol)
-                                .font(.system(size: 40))
-                                .foregroundStyle(.white)
-                                .shadow(radius: 5)
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(isPreparing)
-                        .help(entry.isDownloaded ? "Play" : "Stream")
+                    HStack(spacing: 14) {
+                        control(playSymbol, help: playHelp) { primaryAction() }
+                            .disabled(isPreparing)
 
                         Menu {
                             moreActions
                         } label: {
                             Image(systemName: "ellipsis.circle.fill")
-                                .font(.system(size: 40))
+                                .font(.system(size: 38))
                                 .foregroundStyle(.white)
                                 .shadow(radius: 5)
                         }
                         .menuStyle(.borderlessButton)
                         .menuIndicator(.hidden)
-                        .frame(width: 44, height: 44)
+                        // The same target as the play control. A menu draws
+                        // only its glyph unless it is given a shape to fill.
+                        .frame(width: 52, height: 52)
+                        .contentShape(Rectangle())
                         .help("More")
                     }
                 } else {
@@ -84,6 +78,43 @@ struct BookTile: View {
                 }
             }
         }
+    }
+
+    /// One round control over the cover. Both are the same size, so neither
+    /// is harder to hit than the other.
+    private func control(
+        _ symbol: String,
+        help: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 38))
+                .foregroundStyle(.white)
+                .shadow(radius: 5)
+                .frame(width: 52, height: 52)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+
+    /// Plays this title, or pauses it when it is the one already playing.
+    ///
+    /// Without this the control restarted a title that was already playing,
+    /// which threw away the listener's place.
+    private func primaryAction() {
+        if isCurrent, model.player.entry != nil {
+            model.player.togglePlayPause()
+        } else {
+            Task { await model.play(entry) }
+        }
+    }
+
+    private var playHelp: String {
+        if isCurrent, model.player.isPlaying { return "Pause" }
+        if isCurrent { return "Resume" }
+        return entry.isDownloaded ? "Play" : "Stream"
     }
 
     /// What the second control offers.
@@ -119,7 +150,7 @@ struct BookTile: View {
     }
 
     private var playSymbol: String {
-        if isPreparing { return "hourglass" }
+        if isPreparing { return "hourglass.circle.fill" }
         if isCurrent, model.player.isPlaying { return "pause.circle.fill" }
         return "play.circle.fill"
     }

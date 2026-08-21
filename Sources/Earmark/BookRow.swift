@@ -101,9 +101,17 @@ struct BookRow: View {
     private var actions: some View {
         HStack(spacing: 10) {
             Button {
-                Task { await model.play(entry) }
+                // Pauses the title that is already playing rather than
+                // starting it again from its stored place.
+                if isCurrent, model.player.entry != nil {
+                    model.player.togglePlayPause()
+                } else {
+                    Task { await model.play(entry) }
+                }
             } label: {
                 Image(systemName: playSymbol)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help(entry.isDownloaded ? "Play" : "Stream")
