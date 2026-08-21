@@ -50,8 +50,8 @@ struct RootView: View {
         VStack(spacing: 0) {
             // A version known to be harmful says so before anything else, and
             // says it whatever the settings are.
-            if let recall = updates.recall {
-                RecallBanner(recall: recall)
+            if let advisory = updates.advisory {
+                AdvisoryBanner(advisory: advisory)
                 Divider()
             }
             stage

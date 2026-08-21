@@ -72,27 +72,35 @@ The files it writes are yours to listen to. They are not yours to hand out.
 ## Updates
 
 Earmark asks the releases page what exists and compares those versions with
-its own. There is no update server, and nothing reports what is installed
-anywhere: a download address is worked out from a version number rather than
-read from a list, so there is nothing to keep in step.
+its own. There is no update server, and nothing is sent about what is
+installed: a download address is worked out from a version rather than read
+from a list, so there is nothing to keep in step.
 
-The numbers carry the meaning. The middle one is a finished release and the
-last one is a night's work, so 1.3.0 is finished and 1.2.1 is the day's. The
-stable channel is offered only versions whose last number is zero. The nightly
-channel is offered everything.
+The numbers carry the meaning. The first moves when the shape of the
+application changes, the middle for a finished release, and the last for a
+night's work. So 1.3.0 is finished and 1.3.1 is the day's. The channel is
+decided by the version and never by whether a release is marked as a
+prerelease: a finished release marked that way while it is tried out still
+reaches everybody.
 
-Installing means: fetch the disk image, mount it, check the application inside
-is signed by the same developer as the running one, copy it beside the old one,
-then exchange them and restart. The signature check is a refusal rather than a
-warning: a download that fails it is deleted and nothing is replaced. Copying
-beside the old application first means an install that fails leaves a working
-application rather than none.
+Looking is off by default, and installing without asking is off as well.
+Nothing is requested while looking is off. Check Now works whether or not it
+is on, because asking once by hand is not the same as agreeing to be asked
+every day.
 
-Separately there is a recall list, a file on the site naming versions that
-turned out to be harmful. Earmark reads it on launch and says so if the
-running version is named, with a way to install the fix and a way to go back to
-the last version known to be good. That check is always on: a warning nobody
-switched on warns nobody.
+Installing fetches the disk image, checks every byte arrived, mounts it, and
+checks the application inside is this application, signed by this developer,
+under a certificate Apple issued. That check is a refusal: a download that
+fails it is deleted and nothing is replaced. What passes is copied beside the
+installed application and only then exchanged with it, so an install that
+fails leaves a working application rather than none. An install nobody asked
+for that goes wrong says so and offers itself by hand.
+
+Separately there is a list of faulty builds, read from this site on launch.
+That one is on by default, because a withdrawn build can lose data and a
+warning nobody switched on warns nobody. A build named as critical says so on
+every launch; one named as serious can be set aside against that exact
+version. The list is the same for everybody and the matching happens here.
 
 ## Status
 

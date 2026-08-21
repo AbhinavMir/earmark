@@ -8,9 +8,15 @@ import AudibleKit
 /// replaced, and it is copied beside the old one rather than over it, so a
 /// failure at any point leaves a working application rather than none.
 struct Installer: Sendable {
-    /// Who a build must be signed by. Anything else is refused.
-    static let requirement =
-        "anchor apple generic and certificate leaf[subject.OU] = \"P4ANTPX4G4\""
+    /// What a build must be, to be put in place.
+    ///
+    /// The identifier keeps it to this application, the team keeps it to this
+    /// developer, and the anchor keeps it to a certificate Apple issued.
+    /// Without the identifier, any application by this developer would pass;
+    /// without the team, any signed application would.
+    static let requirement = "identifier \"com.earmark.app\" "
+        + "and anchor apple generic "
+        + "and certificate leaf[subject.OU] = \"P4ANTPX4G4\""
 
     private let session: URLSession
 
@@ -18,11 +24,24 @@ struct Installer: Sendable {
         self.session = session
     }
 
-    enum Step: Sendable {
+    /// What the installer is doing. Said as text at each step, because a
+    /// click that fetches silently reads as a button that did nothing.
+    enum Step: Sendable, CustomStringConvertible {
         case fetching(fraction: Double?)
         case checking
         case replacing
         case done
+
+        var description: String {
+            switch self {
+            case .fetching(let fraction):
+                guard let fraction else { return "Fetching..." }
+                return "Fetching \(Int(min(100, max(0, fraction * 100))))%"
+            case .checking: return "Checking the signature..."
+            case .replacing: return "Putting it in place..."
+            case .done: return "Restarting..."
+            }
+        }
     }
 
     /// Installs `release` over the running application and restarts it.
