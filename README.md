@@ -1,3 +1,5 @@
+<img src="icon.png" width="120" alt="Earmark">
+
 # Earmark
 
 A macOS native audiobook player for an Audible library.
