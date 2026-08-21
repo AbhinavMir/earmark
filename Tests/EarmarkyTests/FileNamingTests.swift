@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 @Suite("File naming and filters")
 struct FileNamingTests {

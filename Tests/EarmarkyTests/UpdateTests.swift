@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Earmark
+@testable import Earmarky
 
 @Suite("Versions")
 struct AppVersionTests {

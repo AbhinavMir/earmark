@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 /// The queue reads the store while a download runs, and the store changes
 /// underneath it: a refresh can drop a title, a file can be deleted, a name

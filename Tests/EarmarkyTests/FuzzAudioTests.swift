@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 /// The audio graph opens files from disk, which can be anything by the time it
 /// gets to them.

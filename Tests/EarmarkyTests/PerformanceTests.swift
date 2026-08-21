@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 /// Work that happens every time anything on screen changes.
 ///

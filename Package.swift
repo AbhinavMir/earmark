@@ -2,10 +2,10 @@
 import PackageDescription
 
 let package = Package(
-    name: "Earmark",
+    name: "Earmarky",
     platforms: [.macOS(.v14)],
     products: [
-        .executable(name: "Earmark", targets: ["Earmark"])
+        .executable(name: "Earmarky", targets: ["Earmarky"])
     ],
     dependencies: [
         // Fetched by name, so a clone of this repository alone builds. Point
@@ -15,12 +15,12 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Earmark",
+            name: "Earmarky",
             dependencies: [.product(name: "AudibleKit", package: "audible-kit")]
         ),
         .testTarget(
-            name: "EarmarkTests",
-            dependencies: ["Earmark"]
+            name: "EarmarkyTests",
+            dependencies: ["Earmarky"]
         )
     ]
 )

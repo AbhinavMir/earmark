@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 /// Every address the sign-in view sees comes from a web page, which is the
 /// least trusted thing the application touches.

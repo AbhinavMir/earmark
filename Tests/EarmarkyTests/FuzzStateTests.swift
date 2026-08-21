@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 /// Drives the queue and the store the way a restless person would.
 @Suite("Fuzzing the queue and the store")

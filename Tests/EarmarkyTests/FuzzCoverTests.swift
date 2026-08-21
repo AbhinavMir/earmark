@@ -2,7 +2,7 @@ import Foundation
 import AppKit
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 /// The cover cache writes files named after identifiers that come from a
 /// server, and reads whatever is on disk at those names.

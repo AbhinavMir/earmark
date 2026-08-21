@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import AudibleKit
-@testable import Earmark
+@testable import Earmarky
 
 /// Sorting and filtering run over the whole library on every keystroke, and
 /// the values they sort by come from a publisher.

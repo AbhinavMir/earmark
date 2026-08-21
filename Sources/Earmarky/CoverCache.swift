@@ -21,7 +21,19 @@ actor CoverCache {
 
     static var defaultDirectory: URL {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("Earmarky/Covers", isDirectory: true)
+        let folder = base.appendingPathComponent("Earmarky/Covers", isDirectory: true)
+
+        // Covers saved under the old name are kept. They can all be fetched
+        // again, but doing so on the first launch after a rename is work
+        // nobody asked for.
+        let former = base.appendingPathComponent("Earmark", isDirectory: true)
+        let manager = FileManager.default
+        if !manager.fileExists(atPath: folder.path),
+           manager.fileExists(atPath: former.path) {
+            try? manager.moveItem(
+                at: former, to: base.appendingPathComponent("Earmarky", isDirectory: true))
+        }
+        return folder
     }
 
     private func fileURL(for asin: String) -> URL {

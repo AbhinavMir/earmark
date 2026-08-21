@@ -5,22 +5,25 @@ struct EarmarkyApp: App {
     @State private var model = AppModel()
     @State private var updates = UpdateModel()
 
+    init() {
+        // Drawing a picture of the library does not wait for a window. A
+        // window only appears once something is on screen to show, and when
+        // the application is started to draw a picture there is nothing.
+        if let path = PromoShot.requestedPath {
+            Task { @MainActor in await PromoShot.run(path: path) }
+        }
+        if let directory = PromoShot.requestedScenesPath {
+            Task { @MainActor in await PromoShot.runScenes(directory: directory) }
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environment(model)
                 .environment(updates)
                 .frame(minWidth: 900, minHeight: 560)
-                .task {
-                    // A picture of the library, drawn without a screen.
-                    if let path = PromoShot.requestedPath {
-                        await PromoShot.run(path: path)
-                    }
-                    if let directory = PromoShot.requestedScenesPath {
-                        await PromoShot.runScenes(directory: directory)
-                    }
-                    await model.start()
-                }
+                .task { await model.start() }
                 .task { await updates.onLaunch() }
         }
         .windowToolbarStyle(.unified)
