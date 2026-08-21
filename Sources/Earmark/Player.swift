@@ -406,6 +406,9 @@ final class Player {
 
     private func tick(_ elapsed: TimeInterval) {
         guard let source else { return }
+        // An item whose length is not known yet reports NaN. Letting that
+        // become the position ends the process the moment anything shows it.
+        guard let elapsed = SafeTime.usable(elapsed) else { return }
         position = source.offset + elapsed
 
         // A title of unknown length takes the length the player reports once
@@ -421,7 +424,7 @@ final class Player {
             pause()
             return
         }
-        if Int(position) % 30 == 0 { reportPosition() }
+        if SafeTime.seconds(position) % 30 == 0 { reportPosition() }
     }
 
     private func finish() {

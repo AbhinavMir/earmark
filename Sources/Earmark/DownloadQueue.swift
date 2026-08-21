@@ -23,8 +23,8 @@ enum DownloadState: Equatable, Sendable {
         case .queued: return "Waiting"
         case .licensing: return "Getting permission"
         case .downloading(let fraction):
-            guard let fraction else { return "Downloading" }
-            return "Downloading \(Int(fraction * 100))%"
+            guard let fraction, fraction.isFinite else { return "Downloading" }
+            return "Downloading \(Int(min(100, max(0, fraction * 100))))%"
         case .decrypting: return "Preparing"
         case .done: return "Done"
         case .failed(let reason): return reason
@@ -213,7 +213,11 @@ final class DownloadQueue {
             guard let position = entry.position else { return "" }
             return "\(position.fileSafe) - "
         } ?? ""
-        return "\(author)/\(series)\(book.title.fileSafe).m4b"
+        // The series prefix and the extension share the component's budget.
+        let stem = "\(series)\(book.title.fileSafe)"
+            .truncatedToBytes(String.fileNameByteLimit)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-. "))
+        return "\(author)/\(stem.isEmpty ? "Untitled" : stem).m4b"
     }
 }
 
@@ -241,6 +245,12 @@ final class ProgressBridge: @unchecked Sendable {
 }
 
 extension String {
+    /// The longest a single part of a path can be, in bytes.
+    ///
+    /// Every file system macOS writes to stops at 255 bytes per component. A
+    /// longer name is not truncated for you: the write fails.
+    static let fileNameByteLimit = 200
+
     /// The text with characters a file name cannot hold replaced.
     ///
     /// Runs of replaced characters collapse to one dash, and dashes at either
@@ -251,7 +261,33 @@ extension String {
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
             .joined(separator: "-")
-        let trimmed = separated.trimmingCharacters(in: CharacterSet(charactersIn: "-. "))
-        return trimmed.isEmpty ? "Untitled" : trimmed
+
+        // Control characters, including the null a file system will not take.
+        let printable = String(separated.unicodeScalars.filter { scalar in
+            !CharacterSet.controlCharacters.contains(scalar)
+        })
+
+        let trimmed = printable
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-. "))
+            .truncatedToBytes(String.fileNameByteLimit)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-. "))
+
+        // A name of dots alone is a reference to a folder, not a file.
+        guard !trimmed.isEmpty, trimmed != ".", trimmed != ".." else { return "Untitled" }
+        return trimmed
+    }
+
+    /// The text cut to fit a byte count, never through a character.
+    func truncatedToBytes(_ limit: Int) -> String {
+        guard utf8.count > limit else { return self }
+        var result = ""
+        var used = 0
+        for character in self {
+            let width = String(character).utf8.count
+            if used + width > limit { break }
+            result.append(character)
+            used += width
+        }
+        return result
     }
 }

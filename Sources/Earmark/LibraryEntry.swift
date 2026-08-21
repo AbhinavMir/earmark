@@ -38,14 +38,13 @@ struct LibraryEntry: Codable, Identifiable, Hashable, Sendable {
     /// Nil while the length is unknown, so the interface can show nothing
     /// rather than a bar at zero.
     var progress: Double? {
-        guard let duration = book.duration, duration > 0 else { return nil }
-        return min(1, position / duration)
+        SafeTime.fraction(position, of: book.duration)
     }
 
     /// What is left to hear, at normal speed.
     var remaining: TimeInterval? {
-        guard let duration = book.duration else { return nil }
-        return max(0, duration - position)
+        guard let duration = SafeTime.usable(book.duration) else { return nil }
+        return max(0, duration - (SafeTime.usable(position) ?? 0))
     }
 
     /// How far through, as a percentage, for a listener rather than a machine.
@@ -66,15 +65,12 @@ struct LibraryEntry: Codable, Identifiable, Hashable, Sendable {
 
     /// A length as hours and minutes, which is how a listener judges a book.
     static func hoursAndMinutes(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds) / 60
-        let hours = total / 60
-        let minutes = total % 60
-        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m"
+        SafeTime.hoursAndMinutes(seconds)
     }
 
     /// True once the listener is past the start but short of the end.
     var isInProgress: Bool {
-        guard let progress else { return position > 0 }
+        guard let progress else { return (SafeTime.usable(position) ?? 0) > 0 }
         return progress > 0.001 && progress < 0.98 && !book.isFinished
     }
 

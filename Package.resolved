@@ -1,13 +1,13 @@
 {
-  "originHash" : "6b0b78eadf4936315657319e0b8360f4e00ca95a0faa28c177f5d6d3503cb6d4",
+  "originHash" : "5ca7e6e2a027a7051d89b3c87000563becc109855ce9589b7c2829faadb564b7",
   "pins" : [
     {
       "identity" : "audible-kit",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/AbhinavMir/audible-kit",
       "state" : {
-        "revision" : "a29a16eab79cf9745e751fd03d0a662e88a0c8a2",
-        "version" : "0.3.0"
+        "revision" : "4a84d1bc6d4f5af29e3f67f048b8008bb03cdf8c",
+        "version" : "0.3.2"
       }
     }
   ],

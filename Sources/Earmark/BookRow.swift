@@ -150,6 +150,6 @@ struct BookRow: View {
     }
 
     static func hoursAndMinutes(_ seconds: TimeInterval) -> String {
-        LibraryEntry.hoursAndMinutes(seconds)
+        SafeTime.hoursAndMinutes(seconds)
     }
 }

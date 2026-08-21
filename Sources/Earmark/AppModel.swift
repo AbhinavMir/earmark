@@ -252,7 +252,13 @@ final class AppModel {
     /// ready, so the click has a visible effect. Starting another title
     /// cancels this one rather than leaving two streams running.
     func play(_ entry: LibraryEntry) async {
+        // A second press on a title already being prepared is not a request to
+        // start it again. Restarting tore down the stream that was starting.
+        if preparingEntry?.id == entry.id { return }
+
         prepareTask?.cancel()
+        stream?.stop()
+        stream = nil
         preparingEntry = entry
         banner = nil
 

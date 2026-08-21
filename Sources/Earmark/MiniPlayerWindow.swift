@@ -94,7 +94,7 @@ struct MiniPlayerView: View {
                     value: Binding(
                         get: { player.position },
                         set: { player.seek(to: $0) }),
-                    in: 0...max(player.duration, 1))
+                    in: SafeTime.sliderRange(player.duration))
                 Text("−" + MiniPlayerView.clock(max(0, player.duration - player.position)))
                     .font(.caption2.monospacedDigit())
                     .foregroundStyle(.secondary)
@@ -105,12 +105,6 @@ struct MiniPlayerView: View {
     }
 
     static func clock(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let rest = total % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, rest)
-            : String(format: "%d:%02d", minutes, rest)
+        SafeTime.clock(seconds)
     }
 }

@@ -208,7 +208,7 @@ struct PlayerBar: View {
                     value: Binding(
                         get: { scrubbing ?? player.position },
                         set: { scrubbing = $0 }),
-                    in: 0...max(player.duration, 1),
+                    in: SafeTime.sliderRange(player.duration),
                     onEditingChanged: { editing in
                         guard !editing, let target = scrubbing else { return }
                         player.seek(to: target)
@@ -258,12 +258,6 @@ struct PlayerBar: View {
     }
 
     private func timeText(_ seconds: TimeInterval) -> String {
-        let total = Int(seconds)
-        let hours = total / 3600
-        let minutes = (total % 3600) / 60
-        let remainder = total % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, remainder)
-            : String(format: "%d:%02d", minutes, remainder)
+        SafeTime.clock(seconds)
     }
 }
