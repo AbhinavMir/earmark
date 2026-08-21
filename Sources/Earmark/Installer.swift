@@ -44,7 +44,7 @@ struct Installer: Sendable {
         }
     }
 
-    /// Installs `release` over the running application and restarts it.
+    /// Installs `release` over the running application.
     ///
     /// - Throws: When anything is wrong. The running application is untouched
     ///   unless the very last step succeeded.
@@ -73,7 +73,6 @@ struct Installer: Sendable {
         try replaceRunningApplication(with: newApp)
 
         onStep(.done)
-        restart()
     }
 
     // MARK: Steps
@@ -211,7 +210,12 @@ struct Installer: Sendable {
         }
     }
 
-    private func restart() {
+    /// Opens the application now on disk and closes this one.
+    ///
+    /// The binary changed under the running process, so it must restart
+    /// before long. Ending a book in the middle is not something to do
+    /// without asking, so the caller decides when.
+    func restart() {
         let running = Bundle.main.bundleURL
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")

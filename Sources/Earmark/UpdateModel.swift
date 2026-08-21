@@ -13,6 +13,8 @@ final class UpdateModel {
         case upToDate
         case available(Release)
         case installing(String)
+        /// In place, waiting to be restarted into.
+        case installed(AppVersion)
         case failed(String)
     }
 
@@ -22,6 +24,15 @@ final class UpdateModel {
     /// Set when an install that nobody asked for went wrong, so it can be
     /// offered by hand instead of failing quietly.
     private(set) var offerAfterFailure: Release?
+    /// True while something is worth showing in the window itself. Settings is
+    /// not the only place a person looks.
+    var hasSomethingToSay: Bool {
+        switch state {
+        case .available, .installed, .installing: return true
+        case .failed: return offerAfterFailure != nil
+        default: return false
+        }
+    }
 
     let current = AppVersion.current
 
@@ -176,10 +187,23 @@ final class UpdateModel {
             try await installer.install(release) { step in
                 Task { @MainActor in self.state = .installing(step.description) }
             }
+            // In place, but not restarted into. Ending a book in the middle is
+            // not something to do without asking.
+            state = .installed(release.version)
         } catch {
             state = .failed(error.localizedDescription)
             if !wasAsked { offerAfterFailure = release }
         }
+    }
+
+    /// Closes this copy and opens what replaced it.
+    func restartNow() {
+        installer.restart()
+    }
+
+    /// Leaves the new version in place until the next launch.
+    func restartLater() {
+        state = .idle
     }
 
     /// Installs the version an advisory names as the fix.

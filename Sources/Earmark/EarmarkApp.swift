@@ -11,7 +11,16 @@ struct EarmarkApp: App {
                 .environment(model)
                 .environment(updates)
                 .frame(minWidth: 900, minHeight: 560)
-                .task { await model.start() }
+                .task {
+                    // A picture of the library, drawn without a screen.
+                    if let path = PromoShot.requestedPath {
+                        await PromoShot.run(path: path)
+                    }
+                    if let directory = PromoShot.requestedScenesPath {
+                        await PromoShot.runScenes(directory: directory)
+                    }
+                    await model.start()
+                }
                 .task { await updates.onLaunch() }
         }
         .windowToolbarStyle(.unified)
@@ -52,6 +61,10 @@ struct RootView: View {
             // says it whatever the settings are.
             if let advisory = updates.advisory {
                 AdvisoryBanner(advisory: advisory)
+                Divider()
+            }
+            if updates.hasSomethingToSay {
+                UpdateBar()
                 Divider()
             }
             stage
