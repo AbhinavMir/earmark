@@ -25,22 +25,26 @@
 
   body {
     margin: 0;
-    padding: 72px 24px 96px;
+    padding: 96px 40px;
     background: var(--bg);
     color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
     -webkit-font-smoothing: antialiased;
-    text-align: center;
   }
 
-  main { max-width: 460px; margin: 0 auto; }
-
-  .hero {
-    /* Its own block, below the text rather than inside it: a picture this
-       wide cannot live in a column meant for a sentence. */
-    margin: 56px auto 0;
-    width: min(1180px, calc(100vw - 48px));
+  .page {
+    /* Two columns: the words on the left, the application on the right. */
+    max-width: 1400px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: minmax(300px, 400px) minmax(0, 1fr);
+    gap: 72px;
+    align-items: center;
   }
+
+  main { max-width: 400px; }
+
+  .hero { margin: 0; }
   .hero img {
     width: 100%;
     height: auto;
@@ -52,31 +56,22 @@
       drop-shadow(0 24px 48px rgba(15, 40, 40, .22));
   }
 
-  .shots {
-    max-width: 1100px;
-    margin: 76px auto 0;
-    display: grid;
-    gap: 64px;
-  }
-
-  figure { margin: 0; }
-
   .mark {
     display: block;
-    width: 116px;
-    height: 116px;
-    margin: 0 auto 26px;
-    border-radius: 26px;
+    width: 96px;
+    height: 96px;
+    margin: 0 0 26px;
+    border-radius: 22px;
     /* The artwork is dark, so it needs an edge of its own against the page. */
     box-shadow: 0 1px 3px rgba(0, 0, 0, .16), 0 10px 26px rgba(15, 40, 40, .18);
   }
 
   h1 {
-    font-size: 40px;
-    line-height: 1.1;
-    letter-spacing: -0.025em;
+    font-size: 44px;
+    line-height: 1.05;
+    letter-spacing: -0.03em;
     font-weight: 600;
-    margin: 0 0 12px;
+    margin: 0 0 14px;
   }
 
   p.lede {
@@ -89,9 +84,8 @@
   .actions {
     display: flex;
     gap: 10px;
-    justify-content: center;
     flex-wrap: wrap;
-    margin-bottom: 20px;
+    margin-bottom: 22px;
   }
 
   a.btn {
@@ -112,6 +106,7 @@
 
   p.meta {
     font-size: 13px;
+    line-height: 1.7;
     color: var(--muted);
     margin: 0;
   }
@@ -120,30 +115,39 @@
     font-size: 12px;
   }
   a.quiet { color: var(--muted); }
+
+  /* A narrow window has no room for two columns, so the picture goes below. */
+  @media (max-width: 900px) {
+    body { padding: 64px 24px 80px; }
+    .page { grid-template-columns: 1fr; gap: 56px; }
+    main { max-width: 520px; }
+    h1 { font-size: 38px; }
+  }
 </style>
 </head>
 <body>
-<main>
-  <img class="mark" src="earmark-512.png" alt="Earmarky" width="116" height="116">
-  <h1>Earmarky</h1>
-  <p class="lede">A native Mac app for your Audible library.</p>
+<div class="page">
+  <main>
+    <img class="mark" src="earmark-512.png" alt="Earmarky" width="96" height="96">
+    <h1>Earmarky</h1>
+    <p class="lede">A native Mac app for your Audible library.</p>
 
-  <div class="actions">
-    <a class="btn primary" href="https://github.com/AbhinavMir/earmark/releases/latest/download/Earmarky-1.0.0.dmg">Download for Mac</a>
-    <a class="btn secondary" href="https://github.com/AbhinavMir/earmark">Source</a>
-  </div>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/AbhinavMir/earmark/releases/latest/download/Earmarky-1.0.0.dmg">Download for Mac</a>
+      <a class="btn secondary" href="https://github.com/AbhinavMir/earmark">Source</a>
+    </div>
 
-  <p class="meta">
-    macOS 14+ · requires <code>brew install ffmpeg</code><br>
-    <a class="quiet" href="https://github.com/AbhinavMir/audible-kit">AudibleKit</a> · not affiliated with Audible
-  </p>
-</main>
+    <p class="meta">
+      macOS 14+ · requires <code>brew install ffmpeg</code><br>
+      <a class="quiet" href="https://github.com/AbhinavMir/audible-kit">AudibleKit</a> · not affiliated with Audible
+    </p>
+  </main>
 
-<figure class="hero">
-  <img src="hero.png"
-       alt="Earmarky showing a library of audiobooks with the sound controls open"
-       width="2200" loading="eager">
-</figure>
-
+  <figure class="hero">
+    <img src="hero.png"
+         alt="Earmarky showing a library of audiobooks with the sound controls open"
+         width="2200" loading="eager">
+  </figure>
+</div>
 </body>
 </html>
