@@ -116,11 +116,14 @@
   }
   a.quiet { color: var(--muted); }
 
-  /* A narrow window has no room for two columns, so the picture goes below. */
+  /* A narrow window has no room for two columns. The words go to the middle
+     and the picture goes below them. */
   @media (max-width: 900px) {
     body { padding: 64px 24px 80px; }
-    .page { grid-template-columns: 1fr; gap: 56px; }
-    main { max-width: 520px; }
+    .page { grid-template-columns: 1fr; gap: 48px; justify-items: center; }
+    main { max-width: 520px; text-align: center; }
+    .mark { margin: 0 auto 26px; }
+    .actions { justify-content: center; }
     h1 { font-size: 38px; }
   }
 </style>
