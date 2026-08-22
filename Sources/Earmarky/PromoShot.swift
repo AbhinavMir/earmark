@@ -86,7 +86,7 @@ enum PromoShot {
                 for: entry.id, url: entry.book.coverURL)
         }
 
-        let view = ShotView(entries: shown, artwork: artwork)
+        let view = ShotView(entries: shown, artwork: artwork, showsSound: true)
 
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2

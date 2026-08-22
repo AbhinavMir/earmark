@@ -57,13 +57,16 @@ final class AppModel {
     /// The work that prepares playback. Cancelled when another title starts.
     private var prepareTask: Task<Void, Never>?
 
-    private let credentials: CredentialStore
+    /// Where credentials live. Shared, because a store remembers what it
+    /// read: saving through a second one leaves the first still believing
+    /// there is nothing there.
+    let credentials: CredentialStore
     private let audioDirectory: URL
     private var client: AudibleClient?
     private var syncTask: Task<Void, Never>?
 
     init(
-        credentials: CredentialStore = MigratingCredentialStore(),
+        credentials: CredentialStore = AppModel.defaultCredentials,
         store: LibraryStore = LibraryStore(),
         audioDirectory: URL = LibraryStore.defaultAudioDirectory
     ) {
@@ -219,6 +222,28 @@ final class AppModel {
 
     func download(_ entries: [LibraryEntry]) {
         queue.enqueue(entries)
+    }
+
+    /// The store the application uses, at the path the application owns.
+    ///
+    /// The path comes from here rather than from the package, so that the
+    /// folder the library is in and the folder the credentials are in are
+    /// always the same one.
+    static var defaultCredentials: CredentialStore {
+        MigratingCredentialStore(
+            file: FileCredentialStore(
+                fileURL: LibraryStore.applicationSupportDirectory
+                    .appendingPathComponent("credentials.json")))
+    }
+
+    /// Keeps a freshly registered device, and carries on.
+    func finishSignIn(with identity: DeviceIdentity) async {
+        do {
+            try credentials.save(identity)
+            await connect()
+        } catch {
+            banner = "The sign-in could not be kept. \(error.localizedDescription)"
+        }
     }
 
     /// Opens Audible in a browser, because buying happens there.

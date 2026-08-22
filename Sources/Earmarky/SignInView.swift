@@ -171,8 +171,10 @@ struct SignInView: View {
                 let name = "Earmarky on \(ProcessInfo.processInfo.hostName)"
                 let identity = try await DeviceRegistration(marketplace: marketplace)
                     .register(code: code, attempt: attempt, deviceName: name)
-                try FileCredentialStore().save(identity)
-                await model.connect()
+                // Kept through the application's own store. A second store
+                // writes to its own idea of where, and the first one has
+                // already decided there is nothing there.
+                await model.finishSignIn(with: identity)
             } catch {
                 failure = error.localizedDescription
                 self.attempt = nil
