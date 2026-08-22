@@ -60,6 +60,7 @@ enum PromoShot {
         for (name, scene) in scenes {
             let renderer = ImageRenderer(content: scene)
             renderer.scale = 2
+            renderer.isOpaque = false
             guard let image = renderer.nsImage,
                   let data = image.tiffRepresentation,
                   let bitmap = NSBitmapImageRep(data: data),
@@ -90,6 +91,7 @@ enum PromoShot {
 
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
+        renderer.isOpaque = false
 
         guard let image = renderer.nsImage,
               let data = image.tiffRepresentation,
@@ -123,18 +125,13 @@ struct ShotView: View {
         window
             .frame(width: 1_040)
             .clipShape(RoundedRectangle(cornerRadius: 12))
-            .shadow(color: .black.opacity(0.30), radius: 34, y: 16)
             .overlay(alignment: .bottomTrailing) {
                 if showsSound { soundPanel.padding(.trailing, 26).padding(.bottom, 76) }
             }
-            // The same air on every side. The picture takes its size from
-            // what is in it rather than being cut to fit a shape.
-            .padding(84)
-            .background(
-                LinearGradient(
-                    colors: [Color(red: 0.05, green: 0.20, blue: 0.20),
-                             Color(red: 0.02, green: 0.13, blue: 0.13)],
-                    startPoint: .topLeading, endPoint: .bottomTrailing))
+            // Nothing behind it. A picture that carries its own background
+            // can only sit on a page of that colour; one without sits on any
+            // page, and the page draws whatever shadow suits it.
+            .padding(6)
     }
 
     private var window: some View {
