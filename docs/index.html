@@ -31,7 +31,7 @@
 
   body {
     margin: 0;
-    padding: 72px 24px 90px;
+    padding: 72px 24px 96px;
     background: var(--bg);
     color: var(--fg);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
@@ -42,8 +42,9 @@
   main { max-width: 460px; margin: 0 auto; }
 
   .hero {
-    margin: 40px auto 30px;
-    /* Wider than the text it sits under, and still short of the window. */
+    /* Its own block, below the text rather than inside it: a picture this
+       wide cannot live in a column meant for a sentence. */
+    margin: 56px auto 0;
     width: min(1180px, calc(100vw - 48px));
   }
   .hero img {
@@ -169,18 +170,17 @@
     <a class="btn secondary" href="https://github.com/AbhinavMir/earmark">Source</a>
   </div>
 
-  <figure class="hero">
-    <img src="hero.png"
-         alt="Earmarky showing a library of audiobooks with the sound controls open"
-         width="2200" loading="eager">
-  </figure>
-
   <p class="meta">
     macOS 14+ · requires <code>brew install ffmpeg</code><br>
     <a class="quiet" href="https://github.com/AbhinavMir/audible-kit">AudibleKit</a> · not affiliated with Audible
   </p>
 </main>
 
+<figure class="hero">
+  <img src="hero.png"
+       alt="Earmarky showing a library of audiobooks with the sound controls open"
+       width="2200" loading="eager">
+</figure>
 
 </body>
 </html>
